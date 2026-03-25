@@ -35,7 +35,20 @@
     .msg-success { color: #28a745; font-size: 1.2em; font-weight: bold; margin: 10px 0; }
     .msg-blue { color: #0056b3; font-size: 1.2em; font-weight: bold; margin: 10px 0; background-color: #e3f2fd; padding: 10px; border-radius: 8px; }
     
-    #status-bar { margin-top: 10px; font-weight: bold; color: #555; }
+    <style>
+  /* (기존 코드 생략) */
+  #status-bar { margin-top: 10px; font-weight: bold; color: #555; }
+  
+  /* ★ [신규 추가] 로고 스타일 */
+  .company-logo { width: 150px; height: auto; margin-bottom: 10px; } 
+#status-bar { margin-top: 10px; font-weight: bold; color: #555; }
+  .company-logo { width: 150px; height: auto; margin-bottom: 10px; } 
+  
+  /* ★ [신규 추가] 테슬라 레드 색상 스타일 클래스 */
+  .tesla-red { color: #cc0000; font-weight: bold; } 
+
+  #my-list-ul { list-style: none; padding: 0; ... }
+  /* 리스트 UI (기존 코드 생략) */
     
     #my-list-ul { list-style: none; padding: 0; text-align: left; background: #fafafa; border-radius: 8px; border: 1px solid #ddd; max-height: 350px; overflow-y: auto; margin-top: 15px; }
     #my-list-ul li { padding: 12px; border-bottom: 1px solid #eee; font-size: 16px; color: #333; display: flex; justify-content: space-between; align-items: center; }
@@ -52,7 +65,8 @@
   </div>
 
   <div id="screen-home" class="hidden">
-    <h2>🚗 테슬라 현장 스캐너</h2><p>작업하실 모드를 선택해주세요.</p>
+    <img src="https://i.postimg.cc/7LSzLXw1/2024-dongbu-logo.png" alt="회사 로고" class="company-logo">
+    <h2><span class="tesla-red">TESLA</span> QR 스캐너</h2><p>작업하실 모드를 선택해주세요.</p>
     <button class="btn-yard" onclick="showScreen('screen-auth-yard')">🟢 야드 위치 등록 (직원용)</button>
     <button class="btn-gm" onclick="showScreen('screen-auth-gm')">🔵 광명 상차 진행 (기사용)</button>
   </div>
