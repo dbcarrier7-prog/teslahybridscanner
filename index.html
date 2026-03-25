@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Tesla Hybrid Scanner V2</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 10px; text-align: center; background-color: #f0f2f5; margin: 0; overflow-x: hidden; }
+    h2, h3 { margin: 10px 0; color: #333; }
+    .hidden { display: none !important; }
+    
+    #screen-loading, #screen-home, #screen-auth-yard, #screen-auth-gm, #screen-scanner, #screen-my-list {
+      max-width: 500px; margin: 0 auto; padding: 20px; background: white; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); box-sizing: border-box; margin-top: 20px;
+    }
+    
+    button { width: 100%; padding: 16px; font-size: 18px; font-weight: bold; border: none; border-radius: 10px; cursor: pointer; margin-top: 10px; transition: 0.2s; }
+    .btn-yard { background-color: #28a745; color: white; }
+    .btn-gm { background-color: #007bff; color: white; }
+    .btn-save { background-color: #ff9800; color: white; }
+    .btn-cancel { background-color: #6c757d; color: white; }
+    .btn-home { background-color: #f8f9fa; color: #333; border: 1px solid #ddd; margin-top: 20px; }
+    .btn-list { background-color: #17a2b8; color: white; margin-top: 15px; } 
+    
+    input { width: 100%; padding: 15px; margin: 10px 0; font-size: 18px; border: 2px solid #ddd; border-radius: 8px; text-align: center; box-sizing: border-box; }
+    
+    #scanner-wrapper { position: relative; width: 100%; border-radius: 10px; overflow: hidden; background: #000; min-height: 250px; margin-top: 15px; }
+    #reader { width: 100%; }
+    .camera-dimmed { opacity: 0.2; pointer-events: none; }
+    
+    #control-panel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); box-sizing: border-box; z-index: 10; display: none; }
+    #vin-display { font-size: 1.2em; color: #000; }
+    
+    .msg-error { color: #dc3545; font-size: 1.2em; font-weight: bold; margin: 10px 0; }
+    .msg-warn { color: #ffc107; font-size: 1.2em; font-weight: bold; margin: 10px 0; }
+    .msg-success { color: #28a745; font-size: 1.2em; font-weight: bold; margin: 10px 0; }
+    .msg-blue { color: #0056b3; font-size: 1.2em; font-weight: bold; margin: 10px 0; background-color: #e3f2fd; padding: 10px; border-radius: 8px; }
+    
+    #status-bar { margin-top: 10px; font-weight: bold; color: #555; }
+    
+    #my-list-ul { list-style: none; padding: 0; text-align: left; background: #fafafa; border-radius: 8px; border: 1px solid #ddd; max-height: 350px; overflow-y: auto; margin-top: 15px; }
+    #my-list-ul li { padding: 12px; border-bottom: 1px solid #eee; font-size: 16px; color: #333; display: flex; justify-content: space-between; align-items: center; }
+    #my-list-ul li:last-child { border-bottom: none; }
+    #my-list-ul li strong { font-size: 18px; color: #0056b3; display: block; margin-top: 3px;}
+    .btn-delete { width: auto; padding: 8px 15px; margin: 0; background-color: #dc3545; color: white; font-size: 14px; border-radius: 5px; }
+  </style>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+</head>
+<body>
+
+  <div id="screen-loading">
+    <h3>🔄 시스템 연결 중...</h3><p>최신 데이터를 불러오고 있습니다.</p>
+  </div>
+
+  <div id="screen-home" class="hidden">
+    <h2>🚗 테슬라 현장 스캐너</h2><p>작업하실 모드를 선택해주세요.</p>
+    <button class="btn-yard" onclick="showScreen('screen-auth-yard')">🟢 야드 위치 등록 (직원용)</button>
+    <button class="btn-gm" onclick="showScreen('screen-auth-gm')">🔵 광명 상차 진행 (기사용)</button>
+  </div>
+
+  <div id="screen-auth-yard" class="hidden">
+    <h3>🟢 직원 인증</h3><p>부여받은 PIN 번호(4자리)를 입력하세요.</p>
+    <input type="password" id="pin-input" placeholder="PIN 번호 입력" inputmode="numeric" />
+    <button class="btn-yard" onclick="verifyPin()">확인 및 시작</button>
+    <button class="btn-home" onclick="showScreen('screen-home')">🔙 처음으로</button>
+  </div>
+
+  <div id="screen-auth-gm" class="hidden">
+    <h3>🔵 기사 정보 입력</h3><p>상차 기록을 위해 성함(또는 호차)을 입력하세요.</p>
+    <input type="text" id="driver-input" placeholder="예: 홍길동 (또는 1호차)" />
+    <button class="btn-gm" onclick="startGmMode()">확인 및 시작</button>
+    <button class="btn-home" onclick="showScreen('screen-home')">🔙 처음으로</button>
+  </div>
+
+  <div id="screen-scanner" class="hidden">
+    <h3 id="mode-title">스캐너 작동 중</h3>
+    <div id="status-bar"></div>
+    <div id="scanner-wrapper">
+      <div id="reader"></div>
+      <div id="control-panel">
+        <p style="margin-top:0;">차대번호: <strong id="vin-display"></strong></p>
+        <div id="result-message"></div>
+        <div id="action-group" class="hidden">
+          <input type="text" id="location-input" class="hidden" placeholder="위치 입력 (예: A-1)" autocomplete="off" />
+          <button id="main-action-btn" class="btn-save" onclick="processAction()">저장 하기</button>
+        </div>
+        <button class="btn-cancel" onclick="resumeScanning()">다시 스캔 (취소)</button>
+      </div>
+    </div>
+    <button id="btn-show-list" class="btn-list hidden" onclick="showMyList()">📋 내가 상차한 차량 보기</button>
+    <button class="btn-home" onclick="stopScannerAndHome()">🔙 모드 다시 선택하기</button>
+  </div>
+
+  <div id="screen-my-list" class="hidden">
+    <h3>📋 내 상차 목록 (<span id="my-list-count">0</span>대)</h3>
+    <ul id="my-list-ul"></ul>
+    <button class="btn-gm" onclick="hideMyList()">📸 다시 스캐너로 돌아가기</button>
+  </div>
+
+  <script>
+    // ★ V2 구글 웹 앱 URL을 여기에 꼭 다시 넣어주세요! ★
+    const API_URL = "https://script.google.com/macros/s/AKfycbzP9rkRFf30-UBwDZkYzLrcelBiZdX_x_9G3I0ae1PqgBo3FYxSiE8_yNQSqZPB8pNYgA/exec";
+
+    let appData = null; let currentMode = ""; let currentUser = ""; let currentVin = ""; let isProcessing = false; let html5QrCode = null;
+    let myScannedVins = []; 
+
+    window.onload = function() {
+      fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { appData = data; showScreen("screen-home"); })
+        .catch(err => { document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; });
+    };
+
+    function showScreen(screenId) { document.querySelectorAll("body > div").forEach(div => div.classList.add("hidden")); document.getElementById(screenId).classList.remove("hidden"); }
+
+function verifyPin() {
+      const pin = document.getElementById("pin-input").value.trim();
+      if (!pin) return alert("PIN 번호를 입력해주세요.");
+      if (appData.users && appData.users[pin]) {
+        currentUser = appData.users[pin]; currentMode = "YARD"; myScannedVins = []; 
+        startScanner("🟢 야드 위치 등록 모드", `작업자: ${currentUser}`);
+        document.getElementById("btn-show-list").classList.add("hidden"); 
+      } else { alert("일치하는 PIN 번호가 없습니다."); }
+    }
+
+    function startGmMode() {
+      const driver = document.getElementById("driver-input").value.trim();
+      if (!driver) return alert("성함이나 호차 번호를 입력해주세요.");
+      currentUser = driver; currentMode = "GM"; myScannedVins = []; 
+      startScanner("🔵 광명 상차 진행 모드", `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`);
+      document.getElementById("btn-show-list").classList.remove("hidden"); 
+    }
+
+    function startScanner(title, statusText) {
+      showScreen("screen-scanner"); document.getElementById("mode-title").innerText = title; document.getElementById("status-bar").innerText = statusText;
+      if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start({ facingMode: "environment" }, { fps: 15, qrbox: { width: 250, height: 250 } }, onScanSuccess).catch(err => alert("카메라 에러"));
+    }
+
+    function stopScannerAndHome() {
+
+      if (html5QrCode && html5QrCode.isScanning) { html5QrCode.stop().then(() => showScreen("screen-home")); } else { showScreen("screen-home"); }
+      document.getElementById("pin-input").value = ""; document.getElementById("driver-input").value = "";
+    }
+
+    function onScanSuccess(decodedText) {
+      if (isProcessing || !appData) return; isProcessing = true; currentVin = decodedText.trim().toUpperCase();
+      document.getElementById("reader").classList.add("camera-dimmed"); document.getElementById("control-panel").style.display = "block"; document.getElementById("vin-display").innerText = currentVin;
+      
+      const msg = document.getElementById("result-message"); const group = document.getElementById("action-group"); const locInput = document.getElementById("location-input"); const actionBtn = document.getElementById("main-action-btn");
+      group.classList.add("hidden"); locInput.classList.add("hidden");
+
+      if (currentMode === "YARD") {
+        if (appData.logs[currentVin]) { msg.className = "msg-warn"; msg.innerText = "⚠️ 이미 위치 등록 완료됨"; }
+        else if (appData.gmTargets[currentVin]) { msg.className = "msg-blue"; msg.innerText = "🏢 [광명] 센터 배정 차량!"; group.classList.remove("hidden"); locInput.classList.remove("hidden"); actionBtn.innerText = "위치 저장"; locInput.focus(); }
+        else if (appData.targets[currentVin]) { msg.className = "msg-success"; msg.innerText = "✅ 확인 (고객 인도 대상)"; group.classList.remove("hidden"); locInput.classList.remove("hidden"); actionBtn.innerText = "위치 저장"; locInput.focus(); }
+        else { msg.className = "msg-error"; msg.innerText = "❌ 명단에 없는 차량"; }
+      } else if (currentMode === "GM") {
+        if (!appData.gmTargets[currentVin]) { msg.className = "msg-error"; msg.innerText = "❌ 광명딜리버리센터 운송 차량이 아닙니다."; }
+        else if (appData.gmLogs[currentVin]) { msg.className = "msg-warn"; msg.innerText = "⚠️ 이미 상차 완료된 차량입니다."; }
+        else { msg.className = "msg-success"; msg.innerText = "✅ 상차 가능 차량"; group.classList.remove("hidden"); actionBtn.innerText = "상차 완료"; }
+      }
+    }
+
+    function processAction() {
+      const msg = document.getElementById("result-message"); const group = document.getElementById("action-group");
+      group.classList.add("hidden"); msg.className = "msg-warn"; msg.innerText = "저장 중... ⏳";
+      const safeVin = encodeURIComponent(currentVin); const safeUser = encodeURIComponent(currentUser);
+
+      if (currentMode === "YARD") {
+        const loc = document.getElementById("location-input").value; if(!loc) { alert("위치를 입력하세요"); resumeScanning(); return; }
+        fetch(`${API_URL}?action=saveYard&vin=${safeVin}&loc=${encodeURIComponent(loc)}&worker=${safeUser}`).then(res => res.json())
+          .then(res => { if(res.status === "SUCCESS") { appData.logs[currentVin] = true; resumeScanning(); } }).catch(err => { alert("통신 오류"); resumeScanning(); });
+      } else if (currentMode === "GM") {
+        fetch(`${API_URL}?action=saveGwangmyeong&vin=${safeVin}&driver=${safeUser}`).then(res => res.json())
+          .then(res => {
+             if(res.status === "SUCCESS") { 
+                 appData.gmLogs[currentVin] = true; appData.gmLoadedCount++; myScannedVins.push(currentVin); 
+                 document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`;
+                 alert("상차 처리되었습니다.\n(누적: " + myScannedVins.length + "대)"); resumeScanning(); 
+             }
+          }).catch(err => { alert("통신 오류"); resumeScanning(); });
+      }
+    }
+
+    function resumeScanning() {
+      document.getElementById("control-panel").style.display = "none"; document.getElementById("location-input").value = ""; document.getElementById("result-message").innerText = ""; document.getElementById("reader").classList.remove("camera-dimmed");
+      setTimeout(() => { isProcessing = false; }, 500);
+    }
+
+    function showMyList() {
+      const ul = document.getElementById("my-list-ul"); ul.innerHTML = "";
+      if (myScannedVins.length === 0) { ul.innerHTML = "<li style='text-align:center; color:#999; display:block;'>아직 상차한 차량이 없습니다.</li>"; } 
+      else {
+        myScannedVins.forEach((vin, index) => {
+          ul.innerHTML += `
+            <li>
+              <span>${index + 1}번째 차량 <strong>${vin}</strong></span>
+              <button class="btn-delete" onclick="deleteVin('${vin}')">취소</button>
+            </li>`;
+        });
+      }
+      document.getElementById("my-list-count").innerText = myScannedVins.length;
+      document.getElementById("screen-scanner").classList.add("hidden"); document.getElementById("screen-my-list").classList.remove("hidden");
+      if (html5QrCode && html5QrCode.isScanning) html5QrCode.pause();
+    }
+
+    function hideMyList() {
+      document.getElementById("screen-my-list").classList.add("hidden"); document.getElementById("screen-scanner").classList.remove("hidden");
+      if (html5QrCode) html5QrCode.resume();
+    }
+
+    // ★ [신규 추가] 리스트에서 삭제 버튼 눌렀을 때 실행되는 함수
+    function deleteVin(vin) {
+      if(!confirm(`[${vin}]\n정말 이 차량의 상차를 취소하시겠습니까?\n(시트에서도 삭제됩니다)`)) return;
+      
+      const safeVin = encodeURIComponent(vin);
+      document.getElementById("my-list-ul").innerHTML = "<li style='text-align:center; display:block;'>삭제 처리 중... ⏳</li>";
+      
+      fetch(`${API_URL}?action=deleteGwangmyeong&vin=${safeVin}`)
+        .then(res => res.json())
+        .then(res => {
+           if(res.status === "SUCCESS") {
+               // 1. 스마트폰 메모리에서 제거
+               myScannedVins = myScannedVins.filter(v => v !== vin);
+               delete appData.gmLogs[vin]; 
+               appData.gmLoadedCount--;
+               
+               // 2. 상태바 카운트 줄이기
+               document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`;
+               
+               // 3. 리스트 다시 그리기
+               alert("정상적으로 상차 취소(삭제) 되었습니다.");
+               showMyList();
+           }
+        }).catch(err => {
+           alert("통신 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+           showMyList(); 
+        });
+    }
+  </script>
+</body>
+</html>
