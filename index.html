@@ -76,7 +76,6 @@
     <button class="btn-home" onclick="showScreen('screen-home')">🔙 처음으로</button>
   </div>
 
-  <!-- 항/창고 작업 설정 화면 (라디오 정렬 수정 완료) -->
   <div id="screen-auth-port" class="hidden">
     <h3>🟠 항/창고 작업 설정</h3><p>작업 정보를 확인하고 선택해주세요.</p>
     <input type="text" id="port-driver-input" placeholder="기사명 입력 (예: 홍길동)" />
@@ -178,8 +177,9 @@
       if (!dep || !dest) return alert("출발지와 도착지를 모두 선택해주세요.");
       
       currentUser = driver; currentMode = "PORT"; myScannedVins = []; 
-      startScanner(`🟠 ${typeName} 스캔 모드`, `기사명: ${currentUser} | ${dep} ➔ ${dest}`);
-      document.getElementById("btn-show-list").classList.add("hidden");
+      // 목록 보기 버튼 활성화
+      startScanner(`🟠 ${typeName} 스캔 모드`, `기사명: ${currentUser} | 누적: 0대`);
+      document.getElementById("btn-show-list").classList.remove("hidden");
     }
 
     function startScanner(title, statusText) {
@@ -261,7 +261,12 @@
              if(res.status === "SUCCESS") { 
                  if(type === 'port') { if(!appData.portLogs) appData.portLogs = {}; appData.portLogs[currentVin] = true; } 
                  else { if(!appData.whLogs) appData.whLogs = {}; appData.whLogs[currentVin] = true; }
-                 alert("정상적으로 저장되었습니다."); resumeScanning(); 
+                 
+                 // 리스트 추가 및 누적 대수 반영
+                 myScannedVins.push(currentVin);
+                 document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 누적: ${myScannedVins.length}대`;
+                 alert("정상적으로 저장되었습니다.\n(누적: " + myScannedVins.length + "대)"); 
+                 resumeScanning(); 
              }
           }).catch(err => { alert("통신 오류"); resumeScanning(); });
       }
@@ -277,10 +282,12 @@
       if (myScannedVins.length === 0) { ul.innerHTML = "<li style='text-align:center; color:#999; display:block;'>아직 상차한 차량이 없습니다.</li>"; } 
       else {
         myScannedVins.forEach((vin, index) => {
+          // 광명 모드일때만 취소 버튼 노출, 항/창고는 확인용 텍스트만 노출
+          const btnHtml = currentMode === "GM" ? `<button class="btn-delete" onclick="deleteVin('${vin}')">취소</button>` : `<span style="color:#888; font-size:14px;">(등록됨)</span>`;
           ul.innerHTML += `
             <li>
               <span>${index + 1}번째 차량 <strong>${vin}</strong></span>
-              <button class="btn-delete" onclick="deleteVin('${vin}')">취소</button>
+              ${btnHtml}
             </li>`;
         });
       }
