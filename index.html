@@ -16,7 +16,6 @@
     button { width: 100%; padding: 16px; font-size: 18px; font-weight: bold; border: none; border-radius: 10px; cursor: pointer; margin-top: 10px; transition: 0.2s; }
     .btn-yard { background-color: #28a745; color: white; }
     .btn-gm { background-color: #007bff; color: white; }
-    /* 신규 추가: 항작업용 오렌지 버튼 */
     .btn-port { background-color: #fd7e14; color: white; } 
     .btn-save { background-color: #ff9800; color: white; }
     .btn-cancel { background-color: #6c757d; color: white; }
@@ -60,7 +59,6 @@
     <h2><span class="tesla-red">TESLA</span> QR 스캐너</h2><p>작업하실 모드를 선택해주세요.</p>
     <button class="btn-yard" onclick="showScreen('screen-auth-yard')">🟢 야드 위치 등록 (직원용)</button>
     <button class="btn-gm" onclick="showScreen('screen-auth-gm')">🔵 광명 상차 진행 (기사용)</button>
-    <!-- 신규 추가된 메뉴 -->
     <button class="btn-port" onclick="showScreen('screen-auth-port')">🟠 항/창고 작업 (기사용)</button>
   </div>
 
@@ -78,17 +76,17 @@
     <button class="btn-home" onclick="showScreen('screen-home')">🔙 처음으로</button>
   </div>
 
-  <!-- 신규 추가된 항/창고 작업 설정 화면 -->
+  <!-- 항/창고 작업 설정 화면 (라디오 정렬 수정 완료) -->
   <div id="screen-auth-port" class="hidden">
     <h3>🟠 항/창고 작업 설정</h3><p>작업 정보를 확인하고 선택해주세요.</p>
     <input type="text" id="port-driver-input" placeholder="기사명 입력 (예: 홍길동)" />
     
-    <div style="text-align: left; background: #fafafa; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin: 10px 0;">
-      <label style="font-size: 18px; font-weight: bold; margin-right: 20px;">
-        <input type="radio" name="portWorkType" value="port" checked onchange="updatePortDropdowns()"> 항작업 스캔
+    <div style="display: flex; justify-content: space-around; align-items: center; background: #fafafa; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin: 10px 0;">
+      <label style="font-size: 16px; font-weight: bold; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+        <input type="radio" name="portWorkType" value="port" checked onchange="updatePortDropdowns()" style="width: 20px; height: 20px; margin: 0;"> 항작업 스캔
       </label>
-      <label style="font-size: 18px; font-weight: bold;">
-        <input type="radio" name="portWorkType" value="warehouse" onchange="updatePortDropdowns()"> 창고작업 스캔
+      <label style="font-size: 16px; font-weight: bold; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+        <input type="radio" name="portWorkType" value="warehouse" onchange="updatePortDropdowns()" style="width: 20px; height: 20px; margin: 0;"> 창고작업 스캔
       </label>
     </div>
 
@@ -130,14 +128,13 @@
     let appData = null; let currentMode = ""; let currentUser = ""; let currentVin = ""; let isProcessing = false; let html5QrCode = null;
     let myScannedVins = []; 
     
-    // 신규 추가: 항/창고 작업 드롭다운 목록
     const PORT_LOCATIONS = {
       port: { dep: ["PIRT", "HPIT"], dest: ["PH선광", "배후부지", "AMF(서울우유)", "PCTC(한진)"] },
       warehouse: { dep: ["배후부지", "AMF(서울우유)", "PCTC(한진)"], dest: ["PH선광", "배후부지", "AMF(서울우유)", "PCTC(한진)"] }
     };
 
     window.onload = function() {
-      updatePortDropdowns(); // 드롭다운 초기화
+      updatePortDropdowns(); 
       fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { appData = data; showScreen("screen-home"); })
         .catch(err => { document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; });
     };
@@ -162,7 +159,6 @@
       document.getElementById("btn-show-list").classList.remove("hidden"); 
     }
 
-    // 신규 추가: 항/창고 작업 드롭다운 변경 로직
     function updatePortDropdowns() {
       const type = document.querySelector('input[name="portWorkType"]:checked').value;
       const depSelect = document.getElementById("port-departure");
@@ -172,7 +168,6 @@
       destSelect.innerHTML = '<option value="">도착지 선택</option>' + PORT_LOCATIONS[type].dest.map(v => `<option value="${v}">${v}</option>`).join('');
     }
 
-    // 신규 추가: 항/창고 작업 모드 시작 로직
     function startPortMode() {
       const driver = document.getElementById("port-driver-input").value.trim();
       const dep = document.getElementById("port-departure").value;
@@ -201,7 +196,6 @@
     function onScanSuccess(decodedText) {
       if (isProcessing || !appData) return; isProcessing = true; 
       
-      // ★ 신규 수정: QR 데이터에서 파이프(|) 기준 분리 후 마지막 17자리만 정확히 추출
       const parts = decodedText.split('|');
       currentVin = parts[parts.length - 1].trim().toUpperCase();
       
@@ -210,7 +204,6 @@
       const msg = document.getElementById("result-message"); const group = document.getElementById("action-group"); const locInput = document.getElementById("location-input"); const actionBtn = document.getElementById("main-action-btn");
       group.classList.add("hidden"); locInput.classList.add("hidden");
 
-      // 17자리 검증
       if(currentVin.length !== 17) {
          msg.className = "msg-error"; msg.innerText = "❌ 올바른 17자리 차대번호가 아닙니다.";
          return;
@@ -226,7 +219,6 @@
         else if (appData.gmLogs[currentVin]) { msg.className = "msg-warn"; msg.innerText = "⚠️ 이미 상차 완료된 차량입니다."; }
         else { msg.className = "msg-success"; msg.innerText = "✅ 상차 가능 차량"; group.classList.remove("hidden"); actionBtn.innerText = "상차 완료"; }
       } else if (currentMode === "PORT") {
-        // 신규 추가: 항/창고 작업 시 스캔 완료 로직 (중복 방지 포함)
         const type = document.querySelector('input[name="portWorkType"]:checked').value;
         const isAlreadyScanned = (type === 'port') ? (appData.portLogs && appData.portLogs[currentVin]) : (appData.whLogs && appData.whLogs[currentVin]);
         
@@ -258,7 +250,6 @@
              }
           }).catch(err => { alert("통신 오류"); resumeScanning(); });
       } else if (currentMode === "PORT") {
-        // 신규 추가: 항/창고 작업 구글 시트 저장 호출
         const type = document.querySelector('input[name="portWorkType"]:checked').value;
         const actionType = type === 'port' ? 'savePort' : 'saveWarehouse';
         const dep = encodeURIComponent(document.getElementById("port-departure").value);
