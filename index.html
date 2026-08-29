@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>동부캐리어 KAIN 하이브리드 스캐너 V2</title>
+  <title>테슬라 스캐너</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
@@ -13,9 +13,9 @@
 </head>
 <body class="bg-gray-100 text-gray-800 h-screen flex flex-col overflow-hidden">
 
-  <!-- 상단 헤더 -->
+  <!-- 상단 헤더 (기존 UI 원복) -->
   <header class="bg-blue-700 text-white p-4 text-center font-bold text-xl shadow-md flex justify-between items-center">
-    <span>KAIN 스캐너 V2</span>
+    <span>테슬라 스캐너</span>
     <span id="user-info" class="text-sm font-normal hidden"></span>
   </header>
 
@@ -28,11 +28,10 @@
       <p class="text-blue-700 font-bold">서버 데이터를 불러오는 중...</p>
     </div>
 
-    <!-- 2. 로그인 화면 -->
+    <!-- 2. 로그인 화면 (이름만 입력하도록 원복) -->
     <div id="login-screen" class="flex-grow flex flex-col items-center justify-center p-8 hidden">
       <h2 class="text-2xl font-bold mb-6 text-gray-700">작업자 로그인</h2>
-      <input type="text" id="login-name" placeholder="이름 (예: 오영우)" class="w-full p-4 mb-4 border rounded text-lg text-center font-bold">
-      <input type="password" id="login-pin" placeholder="PIN 번호 4자리" class="w-full p-4 mb-6 border rounded text-lg text-center font-bold">
+      <input type="text" id="login-name" placeholder="기사명 입력 (예: 홍길동)" class="w-full p-4 mb-6 border rounded text-lg text-center font-bold">
       <button onclick="handleLogin()" class="w-full bg-blue-700 text-white p-4 rounded font-bold text-lg shadow-md active:bg-blue-800">접속하기</button>
     </div>
 
@@ -108,15 +107,13 @@
     let appData = {};
     let currentUser = "";
     let html5QrCode = null;
-    let currentMode = ""; // 'yard', 'gwangmyeong', 'port_wh'
+    let currentMode = ""; 
 
-    // 드롭다운 항목 정의
     const LOCATIONS = {
       port: { dep: ["PIRT", "HPIT"], dest: ["PH선광", "배후부지", "AMF(서울우유)", "PCTC(한진)"] },
       warehouse: { dep: ["배후부지", "AMF(서울우유)", "PCTC(한진)"], dest: ["PH선광", "배후부지", "AMF(서울우유)", "PCTC(한진)"] }
     };
 
-    // 2. 화면 제어 유틸리티
     const el = (id) => document.getElementById(id);
     const screens = ['loading-screen', 'login-screen', 'main-menu', 'driver-menu', 'port-wh-menu', 'scanner-screen'];
     
@@ -125,7 +122,6 @@
       el(screenId).classList.remove('hidden');
     }
 
-    // 3. 앱 초기화 (데이터 불러오기)
     async function initApp() {
       try {
         const response = await fetch(`${API_URL}?action=getData`);
@@ -136,23 +132,21 @@
       }
     }
 
-    // 4. 로그인 로직
+    // 2. 로그인 로직 (이름만 입력하면 통과하도록 원복)
     function handleLogin() {
       const name = el('login-name').value.trim();
-      const pin = el('login-pin').value.trim();
       
-      // 구글 시트 Users 탭 데이터와 검증
-      if (appData.users[pin] === name) {
-        currentUser = name;
-        el('user-info').innerText = `${name} 님`;
-        el('user-info').classList.remove('hidden');
-        showScreen('main-menu');
-      } else {
-        alert("이름 또는 PIN 번호가 일치하지 않습니다.");
+      if (!name) {
+        alert("기사명을 입력해주세요.");
+        return;
       }
+      
+      currentUser = name;
+      el('user-info').innerText = `${name} 님`;
+      el('user-info').classList.remove('hidden');
+      showScreen('main-menu');
     }
 
-    // 5. 드롭다운 업데이트 (항/창고 라디오 버튼 변경 시)
     function updateDropdowns() {
       const type = document.querySelector('input[name="workType"]:checked').value;
       const depSelect = el('departure');
@@ -162,7 +156,6 @@
       destSelect.innerHTML = LOCATIONS[type].dest.map(v => `<option value="${v}">${v}</option>`).join('');
     }
 
-    // 6. 스캐너 구동 로직
     function startYardMode() { currentMode = 'yard'; el('scanner-guide').innerText = "[야드 위치 등록] 스캔"; openCamera(); }
     function startGwangmyeongMode() { currentMode = 'gwangmyeong'; el('scanner-guide').innerText = "[광명딜리버리] 스캔"; openCamera(); }
     function startPortWhScan() { currentMode = 'port_wh'; el('scanner-guide').innerText = "[항/창고 작업] 스캔"; openCamera(); }
@@ -172,7 +165,6 @@
       if (html5QrCode) html5QrCode.stop().catch(err => console.log(err));
       
       html5QrCode = new Html5Qrcode("reader");
-      // 2배 줌 고정 및 플래시(토치) 제어를 위한 설정 추가
       const config = { fps: 10, qrbox: { width: 250, height: 250 }, videoConstraints: { facingMode: "environment", zoom: 2.0 } };
       html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
         .catch(err => { alert("카메라 권한을 허용해주세요."); showScreen('main-menu'); });
@@ -187,23 +179,18 @@
       }
     }
 
-    // 7. 스캔 성공 시 데이터 추출 및 API 전송
     async function onScanSuccess(decodedText) {
-      // 스캐너 일시 정지
       if (html5QrCode) html5QrCode.pause();
 
-      // ★ 핵심: 파이프(|)로 분리 후 마지막 17자리 추출
       const parts = decodedText.split('|');
       let vin = parts[parts.length - 1].trim();
 
-      // 17자리 검증
       if (vin.length !== 17) {
         alert(`오류: 올바른 차량 QR코드가 아닙니다.\n(인식된 데이터: ${decodedText})`);
         if (html5QrCode) html5QrCode.resume();
         return;
       }
 
-      // 모드별 API 호출 셋업
       let action = "";
       let urlParams = `&vin=${vin}`;
 
@@ -225,7 +212,6 @@
         urlParams += `&departure=${dep}&destination=${dest}&driver=${currentUser}`;
       }
 
-      // 백엔드 전송
       try {
         const res = await fetch(`${API_URL}?action=${action}${urlParams}`, { method: 'GET' });
         if (res.ok) {
@@ -235,11 +221,9 @@
         alert("전송 실패. 인터넷 연결을 확인해주세요.");
       }
 
-      // 전송 완료 후 다시 스캔 재개
       if (html5QrCode) html5QrCode.resume();
     }
 
-    // 초기화 시작 및 드롭다운 세팅
     window.onload = () => {
       updateDropdowns();
       initApp();
