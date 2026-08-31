@@ -21,44 +21,20 @@
     .btn-cancel { background-color: #6c757d; color: white; }
     .btn-home { background-color: #f8f9fa; color: #333; border: 1px solid #ddd; margin-top: 20px; }
     .btn-list { background-color: #17a2b8; color: white; margin-top: 15px; } 
-    .btn-photo { background-color: #6f42c1; color: white; margin-top: 10px; }
+    .btn-app { background-color: #000000; color: #00ff00; font-size: 20px; border: 2px solid #00ff00; }
+    .btn-photo { background-color: #6c757d; color: white; font-size: 15px; padding: 12px; }
     
     input, select { width: 100%; padding: 15px; margin: 10px 0; font-size: 18px; border: 2px solid #ddd; border-radius: 8px; text-align: center; box-sizing: border-box; }
     
-    #scanner-wrapper { position: relative; width: 100%; border-radius: 10px; overflow: hidden; background: #000; min-height: 250px; margin-top: 15px; }
-    #reader { width: 100%; }
-    .camera-dimmed { opacity: 0.2; pointer-events: none; }
-    
-    /* ★ 신규 추가: 커스텀 QR 타겟 박스 (레이저 애니메이션 포함) */
-    #target-box {
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      width: 200px; height: 200px; border: 4px solid #ff3b30; border-radius: 12px;
-      box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.6); /* 타겟 박스 주변을 어둡게 */
-      z-index: 5; pointer-events: none; display: none;
-    }
-    #target-box::after {
-      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-      background: #ff3b30; box-shadow: 0 0 10px #ff3b30;
-      animation: scanline 2s linear infinite;
-    }
-    @keyframes scanline {
-      0% { top: 0; opacity: 0; }
-      10% { opacity: 1; }
-      90% { opacity: 1; }
-      100% { top: 100%; opacity: 0; }
-    }
-    /* 라이브러리 기본 음영 제거 (커스텀 박스와 충돌 방지) */
-    #qr-shaded-region { display: none !important; }
-
-    #control-panel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); box-sizing: border-box; z-index: 10; display: none; }
-    #vin-display { font-size: 1.2em; color: #000; }
+    #control-panel { background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); box-sizing: border-box; margin-top: 20px; }
+    #vin-display { font-size: 1.4em; color: #000; letter-spacing: 1px; }
     
     .msg-error { color: #dc3545; font-size: 1.2em; font-weight: bold; margin: 10px 0; }
     .msg-warn { color: #ffc107; font-size: 1.2em; font-weight: bold; margin: 10px 0; }
     .msg-success { color: #28a745; font-size: 1.2em; font-weight: bold; margin: 10px 0; }
     .msg-blue { color: #0056b3; font-size: 1.2em; font-weight: bold; margin: 10px 0; background-color: #e3f2fd; padding: 10px; border-radius: 8px; }
     
-    #status-bar { margin-top: 10px; font-weight: bold; color: #555; }
+    #status-bar { margin-top: 10px; font-weight: bold; color: #555; font-size: 1.1em; }
     .company-logo { width: 150px; height: auto; margin-bottom: 10px; } 
     .tesla-red { color: #cc0000; font-weight: bold; } 
     
@@ -121,24 +97,29 @@
   <div id="screen-scanner" class="hidden">
     <h3 id="mode-title">스캐너 작동 중</h3>
     <div id="status-bar"></div>
-    <div id="scanner-wrapper">
-      <div id="reader"></div>
-      <!-- ★ 신규 추가: 커스텀 타겟 박스 -->
-      <div id="target-box"></div>
-      
-      <div id="control-panel">
-        <p style="margin-top:0;">차대번호: <strong id="vin-display"></strong></p>
-        <div id="result-message"></div>
-        <div id="action-group" class="hidden">
-          <input type="text" id="location-input" class="hidden" placeholder="위치 입력 (예: A-1)" autocomplete="off" />
-          <button id="main-action-btn" class="btn-save" onclick="processAction()">저장 하기</button>
-        </div>
-        <button class="btn-cancel" onclick="resumeScanning()">다시 스캔 (취소)</button>
-      </div>
-    </div>
     
-    <input type="file" id="qr-input-file" accept="image/*" capture="environment" class="hidden">
-    <button class="btn-photo" onclick="document.getElementById('qr-input-file').click()">📸 선명하게 사진 찍어서 스캔하기</button>
+    <!-- ★ 신규: 외부 스캔 앱 호출 전용 버튼 -->
+    <div style="margin: 30px 0;">
+      <p style="font-size: 14px; color: #666; margin-bottom: 5px;">※ 최초 1회 [바코드 스캐너] 앱 설치가 필요합니다.</p>
+      <button class="btn-app" onclick="launchScannerApp()">📱 스캔 앱으로 촬영하기</button>
+      
+      <div style="margin-top: 15px;">
+        <input type="file" id="qr-input-file" accept="image/*" capture="environment" class="hidden">
+        <button class="btn-photo" onclick="document.getElementById('qr-input-file').click()">📸 아이폰 전용 (사진 찍어 올리기)</button>
+      </div>
+      <div id="reader" style="display: none;"></div>
+    </div>
+
+    <!-- 결과 처리 패널 -->
+    <div id="control-panel" class="hidden">
+      <p style="margin-top:0;">인식된 차대번호:<br><strong id="vin-display"></strong></p>
+      <div id="result-message"></div>
+      <div id="action-group" class="hidden">
+        <input type="text" id="location-input" class="hidden" placeholder="위치 입력 (예: A-1)" autocomplete="off" />
+        <button id="main-action-btn" class="btn-save" onclick="processAction()">저장 하기</button>
+      </div>
+      <button class="btn-cancel" onclick="resetScanPanel()">닫기</button>
+    </div>
     
     <button id="btn-show-list" class="btn-list hidden" onclick="showMyList()">📋 내가 상차한 차량 보기</button>
     <button class="btn-home" onclick="stopScannerAndHome()">🔙 모드 다시 선택하기</button>
@@ -147,14 +128,15 @@
   <div id="screen-my-list" class="hidden">
     <h3>📋 내 상차 목록 (<span id="my-list-count">0</span>대)</h3>
     <ul id="my-list-ul"></ul>
-    <button class="btn-gm" onclick="hideMyList()">📸 다시 스캐너로 돌아가기</button>
+    <button class="btn-gm" onclick="hideMyList()">🔙 스캐너로 돌아가기</button>
   </div>
 
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbzP9rkRFf30-UBwDZkYzLrcelBiZdX_x_9G3I0ae1PqgBo3FYxSiE8_yNQSqZPB8pNYgA/exec";
-
-    let appData = null; let currentMode = ""; let currentUser = ""; let currentVin = ""; let isProcessing = false; let html5QrCode = null;
+    
+    let appData = null; let currentMode = ""; let currentUser = ""; let currentVin = ""; let isProcessing = false;
     let myScannedVins = []; 
+    let html5QrCode = null; // 사진 업로드 분석용으로만 사용
     
     const PORT_LOCATIONS = {
       port: { dep: ["PIRT", "HPIT"], dest: ["PH선광", "배후부지", "AMF(서울우유)", "PCTC(한진)"] },
@@ -163,13 +145,92 @@
 
     window.onload = function() {
       updatePortDropdowns(); 
-      fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { appData = data; showScreen("screen-home"); })
-        .catch(err => { document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; });
-        
       document.getElementById('qr-input-file').addEventListener('change', handleImageUpload);
+      
+      // ★ 신규: 외부 앱 스캔 후 되돌아왔을 때 URL 파라미터 감지 및 처리
+      const urlParams = new URLSearchParams(window.location.search);
+      const scannedText = urlParams.get('scanned');
+
+      if (scannedText) {
+        // 앱을 거쳐왔으므로 로컬 스토리지에서 정보 복구
+        restoreState();
+        // 주소창에서 파라미터 제거 (새로고침 시 재실행 방지)
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        document.getElementById("screen-loading").classList.remove("hidden");
+        fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { 
+          appData = data;
+          updateStatusBarAfterFetch();
+          showScreen("screen-scanner");
+          onScanSuccess(scannedText); // 복귀 직후 자동으로 분석 시작
+        }).catch(err => { 
+          document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; 
+        });
+      } else {
+        // 일반 접속
+        fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { 
+          appData = data; 
+          showScreen("screen-home"); 
+        }).catch(err => { 
+          document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; 
+        });
+      }
     };
 
     function showScreen(screenId) { document.querySelectorAll("body > div").forEach(div => div.classList.add("hidden")); document.getElementById(screenId).classList.remove("hidden"); }
+
+    // ★ 상태 보존 (Local Storage 저장)
+    function saveState() {
+      localStorage.setItem('kain_currentUser', currentUser);
+      localStorage.setItem('kain_currentMode', currentMode);
+      if (currentMode === 'PORT') {
+        localStorage.setItem('kain_portWorkType', document.querySelector('input[name="portWorkType"]:checked').value);
+        localStorage.setItem('kain_portDep', document.getElementById("port-departure").value);
+        localStorage.setItem('kain_portDest', document.getElementById("port-destination").value);
+      }
+      localStorage.setItem('kain_myScannedVins', JSON.stringify(myScannedVins));
+    }
+
+    // ★ 상태 복구
+    function restoreState() {
+      currentUser = localStorage.getItem('kain_currentUser') || "";
+      currentMode = localStorage.getItem('kain_currentMode') || "";
+      const savedVins = localStorage.getItem('kain_myScannedVins');
+      myScannedVins = savedVins ? JSON.parse(savedVins) : [];
+      
+      if (currentMode === 'YARD') {
+        document.getElementById("mode-title").innerText = "🟢 야드 위치 등록 모드";
+      } else if (currentMode === 'GM') {
+        document.getElementById("mode-title").innerText = "🔵 광명 상차 진행 모드";
+      } else if (currentMode === 'PORT') {
+        const type = localStorage.getItem('kain_portWorkType') || 'port';
+        const dep = localStorage.getItem('kain_portDep') || '';
+        const dest = localStorage.getItem('kain_portDest') || '';
+        
+        const radios = document.getElementsByName('portWorkType');
+        for(let i=0; i<radios.length; i++){ if(radios[i].value === type) radios[i].checked = true; }
+        updatePortDropdowns();
+        document.getElementById("port-departure").value = dep;
+        document.getElementById("port-destination").value = dest;
+        
+        const typeName = type === 'port' ? '항작업' : '창고작업';
+        document.getElementById("mode-title").innerText = `🟠 ${typeName} 스캔 모드`;
+      }
+    }
+
+    // 통신 완료 후 상단 상태바 최신화
+    function updateStatusBarAfterFetch() {
+      if (currentMode === 'YARD') {
+        document.getElementById("status-bar").innerText = `작업자: ${currentUser}`;
+        document.getElementById("btn-show-list").classList.add("hidden");
+      } else if (currentMode === 'GM') {
+        document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`;
+        document.getElementById("btn-show-list").classList.remove("hidden");
+      } else if (currentMode === 'PORT') {
+        document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 누적: ${myScannedVins.length}대`;
+        document.getElementById("btn-show-list").classList.remove("hidden");
+      }
+    }
 
     function verifyPin() {
       const pin = document.getElementById("pin-input").value.trim();
@@ -193,7 +254,6 @@
       const type = document.querySelector('input[name="portWorkType"]:checked').value;
       const depSelect = document.getElementById("port-departure");
       const destSelect = document.getElementById("port-destination");
-      
       depSelect.innerHTML = '<option value="">출발지 선택</option>' + PORT_LOCATIONS[type].dep.map(v => `<option value="${v}">${v}</option>`).join('');
       destSelect.innerHTML = '<option value="">도착지 선택</option>' + PORT_LOCATIONS[type].dest.map(v => `<option value="${v}">${v}</option>`).join('');
     }
@@ -216,70 +276,73 @@
       showScreen("screen-scanner"); 
       document.getElementById("mode-title").innerText = title; 
       document.getElementById("status-bar").innerText = statusText;
-      
-      // 커스텀 타겟 박스 보이기
-      document.getElementById("target-box").style.display = "block";
-      
-      if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
-
-      html5QrCode.start(
-        { facingMode: "environment" }, 
-        { fps: 15, qrbox: { width: 200, height: 200 } }, 
-        onScanSuccess
-      ).catch(err => console.log("카메라 초기화 스킵 (수동 사진 촬영 가능)"));
+      resetScanPanel();
     }
 
     function stopScannerAndHome() {
-      document.getElementById("target-box").style.display = "none";
-      if (html5QrCode && html5QrCode.isScanning) { html5QrCode.stop().then(() => showScreen("screen-home")); } else { showScreen("screen-home"); }
+      showScreen("screen-home"); 
       document.getElementById("pin-input").value = ""; document.getElementById("driver-input").value = ""; document.getElementById("port-driver-input").value = "";
     }
-    
+
+    // ★ 신규: 외부 스캔 앱 강제 호출 기능 (안드로이드 전용 표준 방식)
+    function launchScannerApp() {
+      saveState(); // 화면이 넘어가기 전에 정보 저장
+      const vURL = "https://teslahybridscanner.vercel.app/?scanned={CODE}";
+      const callbackUrl = encodeURIComponent(vURL);
+      const fallbackUrl = encodeURIComponent("https://play.google.com/store/apps/details?id=com.google.zxing.client.android");
+      
+      // 앱이 있으면 바로 스캔 화면을 띄우고, 없으면 플레이스토어로 이동시킵니다.
+      const intentUrl = `intent://scan/#Intent;scheme=zxing;package=com.google.zxing.client.android;S.ret=${callbackUrl};S.browser_fallback_url=${fallbackUrl};end`;
+      window.location.href = intentUrl;
+    }
+
+    // 아이폰 등 외부 앱 연동 불가 시 대체 수동 스캔 (사진 앨범 처리)
     function handleImageUpload(e) {
       if (e.target.files.length === 0) return;
       const imageFile = e.target.files[0];
       
       const msg = document.getElementById("result-message");
       const cp = document.getElementById("control-panel");
-      
-      document.getElementById("reader").classList.add("camera-dimmed");
-      document.getElementById("target-box").style.display = "none"; // 이미지 분석 중엔 타겟박스 숨김
-      
-      cp.style.display = "block";
+      cp.classList.remove("hidden");
       document.getElementById("action-group").classList.add("hidden");
+      document.getElementById("vin-display").innerText = "로딩 중...";
       msg.className = "msg-blue";
       msg.innerText = "사진 분석 중... ⏳";
 
       if(!html5QrCode) html5QrCode = new Html5Qrcode("reader");
-      if (html5QrCode.isScanning) html5QrCode.pause();
 
       html5QrCode.scanFile(imageFile, true)
-        .then(decodedText => {
-          cp.style.display = "none";
-          onScanSuccess(decodedText);
-          e.target.value = ""; 
-        })
+        .then(decodedText => { onScanSuccess(decodedText); e.target.value = ""; })
         .catch(err => {
           msg.className = "msg-error";
-          msg.innerText = "❌ 사진에서 QR을 찾지 못했습니다. 흔들림 없이 다시 찍어주세요.";
+          msg.innerText = "❌ 사진에서 QR을 찾지 못했습니다. 흔들림 없이 선명하게 다시 찍어주세요.";
           e.target.value = "";
-          setTimeout(() => { resumeScanning(); }, 3000);
         });
+    }
+
+    function resetScanPanel() {
+      document.getElementById("control-panel").classList.add("hidden");
+      document.getElementById("location-input").value = ""; 
+      document.getElementById("result-message").innerText = "";
+      isProcessing = false;
     }
 
     function onScanSuccess(decodedText) {
       if (isProcessing || !appData) return; isProcessing = true; 
-      if (html5QrCode && html5QrCode.isScanning) html5QrCode.pause();
       
-      // 스캔 성공 시 타겟 박스 숨기기
-      document.getElementById("target-box").style.display = "none";
-      
+      // 파이프(|)로 분리 후 마지막 17자리 추출
       const parts = decodedText.split('|');
       currentVin = parts[parts.length - 1].trim().toUpperCase();
       
-      document.getElementById("reader").classList.add("camera-dimmed"); document.getElementById("control-panel").style.display = "block"; document.getElementById("vin-display").innerText = currentVin;
+      const cp = document.getElementById("control-panel");
+      cp.classList.remove("hidden");
+      document.getElementById("vin-display").innerText = currentVin;
       
-      const msg = document.getElementById("result-message"); const group = document.getElementById("action-group"); const locInput = document.getElementById("location-input"); const actionBtn = document.getElementById("main-action-btn");
+      const msg = document.getElementById("result-message"); 
+      const group = document.getElementById("action-group"); 
+      const locInput = document.getElementById("location-input"); 
+      const actionBtn = document.getElementById("main-action-btn");
+      
       group.classList.add("hidden"); locInput.classList.add("hidden");
 
       if(currentVin.length !== 17) {
@@ -315,18 +378,19 @@
       const safeVin = encodeURIComponent(currentVin); const safeUser = encodeURIComponent(currentUser);
 
       if (currentMode === "YARD") {
-        const loc = document.getElementById("location-input").value; if(!loc) { alert("위치를 입력하세요"); resumeScanning(); return; }
+        const loc = document.getElementById("location-input").value; if(!loc) { alert("위치를 입력하세요"); resetScanPanel(); return; }
         fetch(`${API_URL}?action=saveYard&vin=${safeVin}&loc=${encodeURIComponent(loc)}&worker=${safeUser}`).then(res => res.json())
-          .then(res => { if(res.status === "SUCCESS") { appData.logs[currentVin] = true; resumeScanning(); } }).catch(err => { alert("통신 오류"); resumeScanning(); });
+          .then(res => { if(res.status === "SUCCESS") { appData.logs[currentVin] = true; resetScanPanel(); } }).catch(err => { alert("통신 오류"); resetScanPanel(); });
       } else if (currentMode === "GM") {
         fetch(`${API_URL}?action=saveGwangmyeong&vin=${safeVin}&driver=${safeUser}`).then(res => res.json())
           .then(res => {
              if(res.status === "SUCCESS") { 
                  appData.gmLogs[currentVin] = true; appData.gmLoadedCount++; myScannedVins.push(currentVin); 
+                 saveState(); // 누적 대수 로컬 스토리지에 업데이트
                  document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`;
-                 alert("상차 처리되었습니다.\n(누적: " + myScannedVins.length + "대)"); resumeScanning(); 
+                 alert("상차 처리되었습니다.\n(누적: " + myScannedVins.length + "대)"); resetScanPanel(); 
              }
-          }).catch(err => { alert("통신 오류"); resumeScanning(); });
+          }).catch(err => { alert("통신 오류"); resetScanPanel(); });
       } else if (currentMode === "PORT") {
         const type = document.querySelector('input[name="portWorkType"]:checked').value;
         const actionType = type === 'port' ? 'savePort' : 'saveWarehouse';
@@ -341,19 +405,13 @@
                  else { if(!appData.whLogs) appData.whLogs = {}; appData.whLogs[currentVin] = true; }
                  
                  myScannedVins.push(currentVin);
+                 saveState(); // 누적 대수 업데이트
                  document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 누적: ${myScannedVins.length}대`;
                  alert("정상적으로 저장되었습니다.\n(누적: " + myScannedVins.length + "대)"); 
-                 resumeScanning(); 
+                 resetScanPanel(); 
              }
-          }).catch(err => { alert("통신 오류"); resumeScanning(); });
+          }).catch(err => { alert("통신 오류"); resetScanPanel(); });
       }
-    }
-
-    function resumeScanning() {
-      document.getElementById("control-panel").style.display = "none"; document.getElementById("location-input").value = ""; document.getElementById("result-message").innerText = ""; document.getElementById("reader").classList.remove("camera-dimmed");
-      // 다시 스캔할 때 타겟 박스 보이기
-      document.getElementById("target-box").style.display = "block";
-      setTimeout(() => { isProcessing = false; if (html5QrCode && html5QrCode.isPaused) { html5QrCode.resume(); } }, 500);
     }
 
     function showMyList() {
@@ -371,12 +429,10 @@
       }
       document.getElementById("my-list-count").innerText = myScannedVins.length;
       document.getElementById("screen-scanner").classList.add("hidden"); document.getElementById("screen-my-list").classList.remove("hidden");
-      if (html5QrCode && html5QrCode.isScanning) html5QrCode.pause();
     }
 
     function hideMyList() {
       document.getElementById("screen-my-list").classList.add("hidden"); document.getElementById("screen-scanner").classList.remove("hidden");
-      if (html5QrCode && html5QrCode.isPaused) html5QrCode.resume();
     }
 
     function deleteVin(vin) {
@@ -390,6 +446,7 @@
         .then(res => {
            if(res.status === "SUCCESS") {
                myScannedVins = myScannedVins.filter(v => v !== vin);
+               saveState(); // 삭제 후 로컬 스토리지 업데이트
                delete appData.gmLogs[vin]; 
                appData.gmLoadedCount--;
                document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`;
