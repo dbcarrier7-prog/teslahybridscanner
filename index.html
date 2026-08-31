@@ -132,6 +132,8 @@
     <button id="btn-show-list" class="btn-list hidden" onclick="showMyList()">📋 내가 상차한 차량 보기</button>
     <button class="btn-manual" onclick="manualVinEntry()">⌨️ 차대번호 직접 입력 (QR 완전 손상 시)</button>
     <button class="btn-debug" onclick="switchCamera()">🔁 다른 카메라 렌즈로 전환</button>
+    <button class="btn-debug" onclick="toggleResolutionMode()">🎚️ 해상도 낮춰서 테스트</button>
+    <button class="btn-debug" onclick="resetFocusToAuto()">↩️ 초점 자동으로 되돌리기</button>
     <button class="btn-debug" onclick="toggleCameraDebug()">🔧 카메라 상세정보 보기 (문제 보고용)</button>
     <button class="btn-debug" onclick="copyCameraDebug()">📋 위 정보 복사하기 (채팅에 붙여넣기용)</button>
     <button class="btn-home" onclick="stopScannerAndHome()">🔙 모드 다시 선택하기</button>
@@ -223,6 +225,7 @@
     // ================= 커스텀 카메라 + 디코딩 코어 =================
     async function startScanner(title, statusText) {
       showScreen("screen-scanner");
+      lastTitle = title; lastStatusText = statusText;
       document.getElementById("mode-title").innerText = title;
       document.getElementById("status-bar").innerText = statusText;
       failStreak = 0; isDecodePaused = false;
@@ -234,9 +237,8 @@
         mediaStream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "environment" },
-            // 최대한 높은 해상도를 요청 -> 작은 QR도 픽셀 정보가 풍부해짐 (기기 지원 범위 내에서 자동 조정됨)
-            width: { min: 1280, ideal: 3840 },
-            height: { min: 720, ideal: 2160 },
+            width: useLowRes ? { ideal: 1280 } : { min: 1280, ideal: 3840 },
+            height: useLowRes ? { ideal: 720 } : { min: 720, ideal: 2160 },
             advanced: [{ focusMode: "continuous" }]
           },
           audio: false
@@ -306,16 +308,32 @@
         const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
         if (caps.focusDistance) {
           slider.min = caps.focusDistance.min; slider.max = caps.focusDistance.max; slider.step = caps.focusDistance.step || 0.01;
-          const nearValue = caps.focusDistance.min;
-          slider.value = nearValue;
+          slider.value = caps.focusDistance.min;
           slider.classList.remove("hidden"); label.classList.remove("hidden");
-          videoTrack.applyConstraints({ advanced: [{ focusMode: "manual", focusDistance: nearValue }] }).catch(() => {});
+          // 주의: 여기서 자동으로 manual 모드를 걸지 않음. 기기가 실제 수동 렌즈 제어를 지원 안 하면
+          // 오히려 기존에 잘 돌아가던 자동초점(continuous AF)까지 깨질 수 있어서, 사용자가 슬라이더를
+          // 직접 움직였을 때만(onFocusInput) 적용함.
         } else {
           slider.classList.add("hidden"); label.classList.add("hidden");
         }
       } catch (e) {
         slider.classList.add("hidden"); label.classList.add("hidden");
       }
+    }
+
+    function resetFocusToAuto() {
+      if (!videoTrack) return;
+      videoTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] })
+        .then(() => alert("자동 초점(continuous)으로 되돌렸습니다."))
+        .catch(() => alert("이 기기는 초점 모드 전환 자체가 반영되지 않습니다 (원래부터 자동 모드였을 가능성이 높습니다)."));
+    }
+
+    let useLowRes = false; let lastTitle = ""; let lastStatusText = "";
+    async function toggleResolutionMode() {
+      useLowRes = !useLowRes;
+      alert(useLowRes ? "다음부터 낮은 해상도(720p)로 테스트합니다. 다시 스캔을 시작합니다." : "다음부터 다시 고해상도로 시도합니다. 다시 스캔을 시작합니다.");
+      if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+      await startScanner(lastTitle, lastStatusText);
     }
 
     function onFocusInput(value) {
