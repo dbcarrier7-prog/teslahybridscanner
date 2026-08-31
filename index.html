@@ -24,15 +24,19 @@
     
     input, select { width: 100%; padding: 15px; margin: 10px 0; font-size: 18px; border: 2px solid #ddd; border-radius: 8px; text-align: center; box-sizing: border-box; }
     
-    #control-panel { background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); box-sizing: border-box; margin-top: 20px; }
-    #vin-display { font-size: 1.4em; color: #000; letter-spacing: 1px; font-weight: bold; }
+    #scanner-wrapper { position: relative; width: 100%; border-radius: 10px; overflow: hidden; background: #000; min-height: 250px; margin-top: 15px; }
+    #reader { width: 100%; }
+    .camera-dimmed { opacity: 0.2; pointer-events: none; }
+    
+    #control-panel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); box-sizing: border-box; z-index: 10; display: none; }
+    #vin-display { font-size: 1.2em; color: #000; }
     
     .msg-error { color: #dc3545; font-size: 1.2em; font-weight: bold; margin: 10px 0; }
     .msg-warn { color: #ffc107; font-size: 1.2em; font-weight: bold; margin: 10px 0; }
     .msg-success { color: #28a745; font-size: 1.2em; font-weight: bold; margin: 10px 0; }
     .msg-blue { color: #0056b3; font-size: 1.2em; font-weight: bold; margin: 10px 0; background-color: #e3f2fd; padding: 10px; border-radius: 8px; }
     
-    #status-bar { margin-top: 10px; font-weight: bold; color: #555; font-size: 1.1em; }
+    #status-bar { margin-top: 10px; font-weight: bold; color: #555; }
     .company-logo { width: 150px; height: auto; margin-bottom: 10px; } 
     .tesla-red { color: #cc0000; font-weight: bold; } 
     
@@ -42,6 +46,7 @@
     #my-list-ul li strong { font-size: 18px; color: #0056b3; display: block; margin-top: 3px;}
     .btn-delete { width: auto; padding: 8px 15px; margin: 0; background-color: #dc3545; color: white; font-size: 14px; border-radius: 5px; }
   </style>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 </head>
 <body>
 
@@ -87,44 +92,39 @@
     <select id="port-departure"></select>
     <select id="port-destination"></select>
 
-    <button class="btn-port" onclick="startPortMode()">설정 완료 및 스캔 대기</button>
+    <button class="btn-port" onclick="startPortMode()">확인 및 스캔 시작</button>
     <button class="btn-home" onclick="showScreen('screen-home')">🔙 처음으로</button>
   </div>
 
   <div id="screen-scanner" class="hidden">
-    <h3 id="mode-title">스캐너 대기 중</h3>
+    <h3 id="mode-title">스캐너 작동 중</h3>
     <div id="status-bar"></div>
-    
-    <div style="margin: 20px 0; font-size:15px; background: #e8f4fd; padding: 15px; border-radius: 8px; border: 1px solid #bce8f1;">
-      <p style="margin:0;">💡 <b>현장 사용법:</b><br>폰 자체 <b>[QR 코드 스캔]</b>으로 라벨을 찍은 후<br>뜨는 링크를 누르면 <b>설정된 정보로 즉시 자동 저장</b>됩니다!</p>
-    </div>
-
-    <div id="control-panel" class="hidden">
-      <p style="margin-top:0;">추출된 차대번호:<br><strong id="vin-display"></strong></p>
-      <div id="result-message"></div>
-      
-      <div id="action-group" class="hidden">
-        <input type="text" id="location-input" class="hidden" placeholder="위치 입력 (예: A-1)" autocomplete="off" />
-        <button id="main-action-btn" class="btn-save" onclick="processAction()">위치 저장 하기</button>
+    <div id="scanner-wrapper">
+      <div id="reader"></div>
+      <div id="control-panel">
+        <p style="margin-top:0;">차대번호: <strong id="vin-display"></strong></p>
+        <div id="result-message"></div>
+        <div id="action-group" class="hidden">
+          <input type="text" id="location-input" class="hidden" placeholder="위치 입력 (예: A-1)" autocomplete="off" />
+          <button id="main-action-btn" class="btn-save" onclick="processAction()">저장 하기</button>
+        </div>
+        <button class="btn-cancel" onclick="resumeScanning()">다시 스캔 (취소)</button>
       </div>
-      
-      <button class="btn-cancel" onclick="resetScanPanel()">다음 차량 대기 중</button>
     </div>
-    
     <button id="btn-show-list" class="btn-list hidden" onclick="showMyList()">📋 내가 상차한 차량 보기</button>
-    <button class="btn-home" onclick="clearStateAndHome()" style="margin-top: 30px;">🔙 로그아웃 (처음으로)</button>
+    <button class="btn-home" onclick="stopScannerAndHome()">🔙 모드 다시 선택하기</button>
   </div>
 
   <div id="screen-my-list" class="hidden">
     <h3>📋 내 상차 목록 (<span id="my-list-count">0</span>대)</h3>
     <ul id="my-list-ul"></ul>
-    <button class="btn-gm" onclick="hideMyList()">🔙 스캐너 대기 화면으로</button>
+    <button class="btn-gm" onclick="hideMyList()">📸 다시 스캐너로 돌아가기</button>
   </div>
 
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbzP9rkRFf30-UBwDZkYzLrcelBiZdX_x_9G3I0ae1PqgBo3FYxSiE8_yNQSqZPB8pNYgA/exec";
-    
-    let appData = null; let currentMode = ""; let currentUser = ""; let currentVin = ""; let isProcessing = false;
+
+    let appData = null; let currentMode = ""; let currentUser = ""; let currentVin = ""; let isProcessing = false; let html5QrCode = null;
     let myScannedVins = []; 
     
     const PORT_LOCATIONS = {
@@ -134,83 +134,17 @@
 
     window.onload = function() {
       updatePortDropdowns(); 
-      
-      const urlParams = new URLSearchParams(window.location.search);
-      const scannedText = urlParams.get('scanned');
-      const savedUser = localStorage.getItem('kain_currentUser');
-      
-      fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { 
-        appData = data;
-        
-        if (savedUser) {
-           restoreState();
-           updateStatusBarAfterFetch();
-           showScreen("screen-scanner");
-           
-           if (scannedText) {
-             window.history.replaceState({}, document.title, window.location.pathname);
-             onScanSuccess(scannedText); // 스캔 데이터 자동 처리
-           }
-        } else {
-           showScreen("screen-home"); 
-        }
-      }).catch(err => { 
-        document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; 
-      });
+      fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { appData = data; showScreen("screen-home"); })
+        .catch(err => { document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; });
     };
 
     function showScreen(screenId) { document.querySelectorAll("body > div").forEach(div => div.classList.add("hidden")); document.getElementById(screenId).classList.remove("hidden"); }
-
-    function saveState() {
-      localStorage.setItem('kain_currentUser', currentUser);
-      localStorage.setItem('kain_currentMode', currentMode);
-      if (currentMode === 'PORT') {
-        localStorage.setItem('kain_portWorkType', document.querySelector('input[name="portWorkType"]:checked').value);
-        localStorage.setItem('kain_portDep', document.getElementById("port-departure").value);
-        localStorage.setItem('kain_portDest', document.getElementById("port-destination").value);
-      }
-      localStorage.setItem('kain_myScannedVins', JSON.stringify(myScannedVins));
-    }
-
-    function restoreState() {
-      currentUser = localStorage.getItem('kain_currentUser') || "";
-      currentMode = localStorage.getItem('kain_currentMode') || "";
-      const savedVins = localStorage.getItem('kain_myScannedVins');
-      myScannedVins = savedVins ? JSON.parse(savedVins) : [];
-      
-      if (currentMode === 'YARD') {
-        document.getElementById("mode-title").innerText = "🟢 야드 위치 등록 모드";
-      } else if (currentMode === 'GM') {
-        document.getElementById("mode-title").innerText = "🔵 광명 상차 진행 모드";
-      } else if (currentMode === 'PORT') {
-        const type = localStorage.getItem('kain_portWorkType') || 'port';
-        const typeName = type === 'port' ? '항작업' : '창고작업';
-        document.getElementById("mode-title").innerText = `🟠 ${typeName} 스캔 모드`;
-      }
-    }
-
-    function updateStatusBarAfterFetch() {
-      if (currentMode === 'YARD') {
-        document.getElementById("status-bar").innerText = `작업자: ${currentUser}`;
-        document.getElementById("btn-show-list").classList.add("hidden");
-      } else if (currentMode === 'GM') {
-        document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`;
-        document.getElementById("btn-show-list").classList.remove("hidden");
-      } else if (currentMode === 'PORT') {
-        const type = localStorage.getItem('kain_portWorkType') || 'port';
-        const dep = localStorage.getItem('kain_portDep') || '';
-        const dest = localStorage.getItem('kain_portDest') || '';
-        document.getElementById("status-bar").innerText = `기사명: ${currentUser} | [${dep} ➔ ${dest}] | 누적: ${myScannedVins.length}대`;
-        document.getElementById("btn-show-list").classList.remove("hidden");
-      }
-    }
 
     function verifyPin() {
       const pin = document.getElementById("pin-input").value.trim();
       if (!pin) return alert("PIN 번호를 입력해주세요.");
       if (appData.users && appData.users[pin]) {
         currentUser = appData.users[pin]; currentMode = "YARD"; myScannedVins = []; 
-        saveState();
         startScanner("🟢 야드 위치 등록 모드", `작업자: ${currentUser}`);
         document.getElementById("btn-show-list").classList.add("hidden"); 
       } else { alert("일치하는 PIN 번호가 없습니다."); }
@@ -220,7 +154,6 @@
       const driver = document.getElementById("driver-input").value.trim();
       if (!driver) return alert("성함이나 호차 번호를 입력해주세요.");
       currentUser = driver; currentMode = "GM"; myScannedVins = []; 
-      saveState();
       startScanner("🔵 광명 상차 진행 모드", `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`);
       document.getElementById("btn-show-list").classList.remove("hidden"); 
     }
@@ -229,6 +162,7 @@
       const type = document.querySelector('input[name="portWorkType"]:checked').value;
       const depSelect = document.getElementById("port-departure");
       const destSelect = document.getElementById("port-destination");
+      
       depSelect.innerHTML = '<option value="">출발지 선택</option>' + PORT_LOCATIONS[type].dep.map(v => `<option value="${v}">${v}</option>`).join('');
       destSelect.innerHTML = '<option value="">도착지 선택</option>' + PORT_LOCATIONS[type].dest.map(v => `<option value="${v}">${v}</option>`).join('');
     }
@@ -243,59 +177,31 @@
       if (!dep || !dest) return alert("출발지와 도착지를 모두 선택해주세요.");
       
       currentUser = driver; currentMode = "PORT"; myScannedVins = []; 
-      saveState();
-      startScanner(`🟠 ${typeName} 스캔 모드`, `기사명: ${currentUser} | [${dep} ➔ ${dest}] | 누적: 0대`);
+      // 목록 보기 버튼 활성화
+      startScanner(`🟠 ${typeName} 스캔 모드`, `기사명: ${currentUser} | 누적: 0대`);
       document.getElementById("btn-show-list").classList.remove("hidden");
     }
 
     function startScanner(title, statusText) {
-      showScreen("screen-scanner"); 
-      document.getElementById("mode-title").innerText = title; 
-      document.getElementById("status-bar").innerText = statusText;
-      resetScanPanel();
+      showScreen("screen-scanner"); document.getElementById("mode-title").innerText = title; document.getElementById("status-bar").innerText = statusText;
+      if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start({ facingMode: "environment" }, { fps: 15, qrbox: { width: 250, height: 250 } }, onScanSuccess).catch(err => alert("카메라 에러"));
     }
 
-    function clearStateAndHome() {
-      localStorage.removeItem('kain_currentUser');
-      localStorage.removeItem('kain_currentMode');
-      localStorage.removeItem('kain_myScannedVins');
-      showScreen("screen-home"); 
+    function stopScannerAndHome() {
+      if (html5QrCode && html5QrCode.isScanning) { html5QrCode.stop().then(() => showScreen("screen-home")); } else { showScreen("screen-home"); }
       document.getElementById("pin-input").value = ""; document.getElementById("driver-input").value = ""; document.getElementById("port-driver-input").value = "";
     }
 
-    function resetScanPanel() {
-      document.getElementById("control-panel").classList.add("hidden");
-      document.getElementById("location-input").value = ""; 
-      document.getElementById("result-message").innerText = "";
-      isProcessing = false;
-    }
-
-    function extractVin(rawText) {
-      if (!rawText) return "";
-      let cleanText = rawText.trim();
-      const parts = cleanText.split(/[\|\,\;\s]+/);
-      for (let p of parts) {
-        let candidate = p.trim().toUpperCase();
-        if (candidate.length === 17 && /^[A-HJ-NPR-Z0-9]{17}$/.test(candidate)) return candidate;
-      }
-      const match = cleanText.match(/[A-HJ-NPR-Z0-9]{17}/);
-      if (match) return match[0].toUpperCase();
-      if (cleanText.length >= 17) return cleanText.slice(-17).toUpperCase();
-      return cleanText.toUpperCase();
-    }
-
     function onScanSuccess(decodedText) {
-      currentVin = extractVin(decodedText);
+      if (isProcessing || !appData) return; isProcessing = true; 
       
-      const cp = document.getElementById("control-panel");
-      cp.classList.remove("hidden");
-      document.getElementById("vin-display").innerText = currentVin;
+      const parts = decodedText.split('|');
+      currentVin = parts[parts.length - 1].trim().toUpperCase();
       
-      const msg = document.getElementById("result-message"); 
-      const group = document.getElementById("action-group"); 
-      const locInput = document.getElementById("location-input"); 
-      const actionBtn = document.getElementById("main-action-btn");
+      document.getElementById("reader").classList.add("camera-dimmed"); document.getElementById("control-panel").style.display = "block"; document.getElementById("vin-display").innerText = currentVin;
       
+      const msg = document.getElementById("result-message"); const group = document.getElementById("action-group"); const locInput = document.getElementById("location-input"); const actionBtn = document.getElementById("main-action-btn");
       group.classList.add("hidden"); locInput.classList.add("hidden");
 
       if(currentVin.length !== 17) {
@@ -311,49 +217,43 @@
       } else if (currentMode === "GM") {
         if (!appData.gmTargets[currentVin]) { msg.className = "msg-error"; msg.innerText = "❌ 광명딜리버리센터 운송 차량이 아닙니다."; }
         else if (appData.gmLogs[currentVin]) { msg.className = "msg-warn"; msg.innerText = "⚠️ 이미 상차 완료된 차량입니다."; }
-        else { 
-           msg.className = "msg-success"; msg.innerText = "🚀 상차 자동 처리 중... ⏳"; 
-           processAction(); 
-        }
+        else { msg.className = "msg-success"; msg.innerText = "✅ 상차 가능 차량"; group.classList.remove("hidden"); actionBtn.innerText = "상차 완료"; }
       } else if (currentMode === "PORT") {
-        const type = localStorage.getItem('kain_portWorkType') || document.querySelector('input[name="portWorkType"]:checked').value;
+        const type = document.querySelector('input[name="portWorkType"]:checked').value;
         const isAlreadyScanned = (type === 'port') ? (appData.portLogs && appData.portLogs[currentVin]) : (appData.whLogs && appData.whLogs[currentVin]);
         
         if (isAlreadyScanned) { 
            msg.className = "msg-warn"; msg.innerText = "⚠️ 이미 등록된 차량입니다."; 
         } else {
-           msg.className = "msg-success"; msg.innerText = "🚀 설정된 정보로 자동 저장 중... ⏳"; 
-           processAction(); 
+           msg.className = "msg-success"; msg.innerText = "✅ 정상 차량 확인"; 
+           group.classList.remove("hidden"); actionBtn.innerText = "저장 하기";
         }
       }
     }
 
     function processAction() {
-      const msg = document.getElementById("result-message"); 
-      const safeVin = encodeURIComponent(currentVin); 
-      const safeUser = encodeURIComponent(currentUser);
+      const msg = document.getElementById("result-message"); const group = document.getElementById("action-group");
+      group.classList.add("hidden"); msg.className = "msg-warn"; msg.innerText = "저장 중... ⏳";
+      const safeVin = encodeURIComponent(currentVin); const safeUser = encodeURIComponent(currentUser);
 
       if (currentMode === "YARD") {
-        const loc = document.getElementById("location-input").value; if(!loc) { alert("위치를 입력하세요"); resetScanPanel(); return; }
+        const loc = document.getElementById("location-input").value; if(!loc) { alert("위치를 입력하세요"); resumeScanning(); return; }
         fetch(`${API_URL}?action=saveYard&vin=${safeVin}&loc=${encodeURIComponent(loc)}&worker=${safeUser}`).then(res => res.json())
-          .then(res => { if(res.status === "SUCCESS") { appData.logs[currentVin] = true; alert("위치가 저장되었습니다."); resetScanPanel(); } }).catch(err => { alert("통신 오류"); resetScanPanel(); });
+          .then(res => { if(res.status === "SUCCESS") { appData.logs[currentVin] = true; resumeScanning(); } }).catch(err => { alert("통신 오류"); resumeScanning(); });
       } else if (currentMode === "GM") {
         fetch(`${API_URL}?action=saveGwangmyeong&vin=${safeVin}&driver=${safeUser}`).then(res => res.json())
           .then(res => {
              if(res.status === "SUCCESS") { 
                  appData.gmLogs[currentVin] = true; appData.gmLoadedCount++; myScannedVins.push(currentVin); 
-                 saveState(); 
                  document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`;
-                 msg.className = "msg-success";
-                 msg.innerText = `✅ [상차완료] ${currentVin}`;
-                 setTimeout(() => { resetScanPanel(); }, 1200); 
+                 alert("상차 처리되었습니다.\n(누적: " + myScannedVins.length + "대)"); resumeScanning(); 
              }
-          }).catch(err => { alert("통신 오류"); resetScanPanel(); });
+          }).catch(err => { alert("통신 오류"); resumeScanning(); });
       } else if (currentMode === "PORT") {
-        const type = localStorage.getItem('kain_portWorkType') || 'port';
+        const type = document.querySelector('input[name="portWorkType"]:checked').value;
         const actionType = type === 'port' ? 'savePort' : 'saveWarehouse';
-        const dep = encodeURIComponent(localStorage.getItem('kain_portDep') || '');
-        const dest = encodeURIComponent(localStorage.getItem('kain_portDest') || '');
+        const dep = encodeURIComponent(document.getElementById("port-departure").value);
+        const dest = encodeURIComponent(document.getElementById("port-destination").value);
 
         fetch(`${API_URL}?action=${actionType}&vin=${safeVin}&departure=${dep}&destination=${dest}&driver=${safeUser}`)
           .then(res => res.json())
@@ -362,20 +262,19 @@
                  if(type === 'port') { if(!appData.portLogs) appData.portLogs = {}; appData.portLogs[currentVin] = true; } 
                  else { if(!appData.whLogs) appData.whLogs = {}; appData.whLogs[currentVin] = true; }
                  
+                 // 리스트 추가 및 누적 대수 반영
                  myScannedVins.push(currentVin);
-                 saveState(); 
-                 
-                 const depStr = decodeURIComponent(dep);
-                 const destStr = decodeURIComponent(dest);
-                 document.getElementById("status-bar").innerText = `기사명: ${currentUser} | [${depStr} ➔ ${destStr}] | 누적: ${myScannedVins.length}대`;
-                 
-                 msg.className = "msg-success";
-                 msg.innerText = `✅ [저장완료] ${currentVin} (누적: ${myScannedVins.length}대)`;
-                 
-                 setTimeout(() => { resetScanPanel(); }, 1200); 
+                 document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 누적: ${myScannedVins.length}대`;
+                 alert("정상적으로 저장되었습니다.\n(누적: " + myScannedVins.length + "대)"); 
+                 resumeScanning(); 
              }
-          }).catch(err => { alert("통신 오류"); resetScanPanel(); });
+          }).catch(err => { alert("통신 오류"); resumeScanning(); });
       }
+    }
+
+    function resumeScanning() {
+      document.getElementById("control-panel").style.display = "none"; document.getElementById("location-input").value = ""; document.getElementById("result-message").innerText = ""; document.getElementById("reader").classList.remove("camera-dimmed");
+      setTimeout(() => { isProcessing = false; }, 500);
     }
 
     function showMyList() {
@@ -383,6 +282,7 @@
       if (myScannedVins.length === 0) { ul.innerHTML = "<li style='text-align:center; color:#999; display:block;'>아직 상차한 차량이 없습니다.</li>"; } 
       else {
         myScannedVins.forEach((vin, index) => {
+          // 광명 모드일때만 취소 버튼 노출, 항/창고는 확인용 텍스트만 노출
           const btnHtml = currentMode === "GM" ? `<button class="btn-delete" onclick="deleteVin('${vin}')">취소</button>` : `<span style="color:#888; font-size:14px;">(등록됨)</span>`;
           ul.innerHTML += `
             <li>
@@ -393,10 +293,12 @@
       }
       document.getElementById("my-list-count").innerText = myScannedVins.length;
       document.getElementById("screen-scanner").classList.add("hidden"); document.getElementById("screen-my-list").classList.remove("hidden");
+      if (html5QrCode && html5QrCode.isScanning) html5QrCode.pause();
     }
 
     function hideMyList() {
       document.getElementById("screen-my-list").classList.add("hidden"); document.getElementById("screen-scanner").classList.remove("hidden");
+      if (html5QrCode) html5QrCode.resume();
     }
 
     function deleteVin(vin) {
@@ -410,7 +312,6 @@
         .then(res => {
            if(res.status === "SUCCESS") {
                myScannedVins = myScannedVins.filter(v => v !== vin);
-               saveState(); 
                delete appData.gmLogs[vin]; 
                appData.gmLoadedCount--;
                document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`;
