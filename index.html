@@ -284,17 +284,17 @@
       document.getElementById("pin-input").value = ""; document.getElementById("driver-input").value = ""; document.getElementById("port-driver-input").value = "";
     }
 
-    // ★ 신규: 외부 스캔 앱 강제 호출 기능 (안드로이드 전용 표준 방식)
+    // ★ 완전 수정: Binary Eye의 '진짜' 정확한 앱 주소 적용
     function launchScannerApp() {
       saveState(); // 화면이 넘어가기 전에 정보 저장
       const vURL = "https://teslahybridscanner.vercel.app/?scanned={CODE}";
       const callbackUrl = encodeURIComponent(vURL);
       
-      // Gamma Play 앱 플레이스토어 설치 주소
-      const fallbackUrl = encodeURIComponent("https://play.google.com/store/apps/details?id=com.gammaplay.barcode");
+      // ★ 정확한 Binary Eye 플레이스토어 주소
+      const fallbackUrl = encodeURIComponent("https://play.google.com/store/apps/details?id=de.markusfisch.android.binaryeye");
       
-      // Gamma Play 앱 강제 실행 (없으면 fallbackUrl로 이동)
-      const intentUrl = `intent://scan/#Intent;scheme=zxing;package=com.gammaplay.barcode;S.ret=${callbackUrl};S.browser_fallback_url=${fallbackUrl};end`;
+      // ★ 정확한 패키지명(de.markusfisch.android.binaryeye)으로 강제 실행
+      const intentUrl = `intent://scan/#Intent;scheme=zxing;package=de.markusfisch.android.binaryeye;S.ret=${callbackUrl};S.browser_fallback_url=${fallbackUrl};end`;
       
       window.location.href = intentUrl;
     }
