@@ -290,11 +290,11 @@
       const vURL = "https://teslahybridscanner.vercel.app/?scanned={CODE}";
       const callbackUrl = encodeURIComponent(vURL);
       
-      // Binary Eye 플레이스토어 설치 주소
-      const fallbackUrl = encodeURIComponent("https://play.google.com/store/apps/details?id=com.teacapps.barcodescanner");
+      // Gamma Play 앱 플레이스토어 설치 주소
+      const fallbackUrl = encodeURIComponent("https://play.google.com/store/apps/details?id=com.gammaplay.barcode");
       
-      // Binary Eye 앱 강제 실행 (없으면 fallbackUrl로 이동)
-      const intentUrl = `intent://scan/#Intent;scheme=zxing;package=com.teacapps.barcodescanner;S.ret=${callbackUrl};S.browser_fallback_url=${fallbackUrl};end`;
+      // Gamma Play 앱 강제 실행 (없으면 fallbackUrl로 이동)
+      const intentUrl = `intent://scan/#Intent;scheme=zxing;package=com.gammaplay.barcode;S.ret=${callbackUrl};S.browser_fallback_url=${fallbackUrl};end`;
       
       window.location.href = intentUrl;
     }
