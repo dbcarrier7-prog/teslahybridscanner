@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Tesla Hybrid Scanner V2</title>
+  <title>Tesla Hybrid Scanner V3</title>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 10px; text-align: center; background-color: #f0f2f5; margin: 0; overflow-x: hidden; }
     h2, h3 { margin: 10px 0; color: #333; }
@@ -26,7 +26,7 @@
     input, select { width: 100%; padding: 15px; margin: 10px 0; font-size: 18px; border: 2px solid #ddd; border-radius: 8px; text-align: center; box-sizing: border-box; }
     
     #scanner-wrapper { position: relative; width: 100%; border-radius: 10px; overflow: hidden; background: #000; min-height: 250px; margin-top: 15px; }
-    #reader { width: 100%; }
+    #scanner-video { width: 100%; display: block; background: #000; }
     .camera-dimmed { opacity: 0.2; pointer-events: none; }
     
     #control-panel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); box-sizing: border-box; z-index: 10; display: none; }
@@ -47,11 +47,12 @@
     #my-list-ul li strong { font-size: 18px; color: #0056b3; display: block; margin-top: 3px;}
     .btn-delete { width: auto; padding: 8px 15px; margin: 0; background-color: #dc3545; color: white; font-size: 14px; border-radius: 5px; }
 
-    /* --- 추가: 줌 슬라이더 / 손전등 버튼 --- */
     #zoom-slider { width: 92%; margin: 15px auto 0; display: block; accent-color: #fd7e14; }
     #torch-btn { background-color: #343a40; color: #fff; width: auto; padding: 10px 22px; margin: 12px auto 0; display: block; font-size: 15px; }
+    #engine-status { font-size: 12px; color: #999; margin-top: 6px; }
   </style>
-  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <!-- html5-qrcode 제거, jsQR을 직접 제어하여 해상도/전처리/폴백을 전부 커스텀 제어 -->
+  <script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
 </head>
 <body>
 
@@ -105,7 +106,7 @@
     <h3 id="mode-title">스캐너 작동 중</h3>
     <div id="status-bar"></div>
     <div id="scanner-wrapper">
-      <div id="reader"></div>
+      <video id="scanner-video" playsinline muted autoplay></video>
       <div id="control-panel">
         <p style="margin-top:0;">차대번호: <strong id="vin-display"></strong></p>
         <div id="result-message"></div>
@@ -117,14 +118,12 @@
       </div>
     </div>
 
-    <!-- 추가: 줌 슬라이더 (지원 기기에서만 자동 노출) -->
     <input type="range" id="zoom-slider" class="hidden" min="1" max="5" step="0.1" value="1" oninput="onZoomInput(this.value)">
-    <!-- 추가: 손전등 버튼 (지원 기기에서만 자동 노출, iOS Safari는 미지원이라 계속 숨김) -->
     <button id="torch-btn" class="hidden">💡 조명 켜기</button>
+    <div id="engine-status"></div>
 
     <button id="btn-show-list" class="btn-list hidden" onclick="showMyList()">📋 내가 상차한 차량 보기</button>
-    <!-- 추가: QR 인식 불가 시 수동 입력 폴백 -->
-    <button class="btn-manual" onclick="manualVinEntry()">⌨️ 차대번호 직접 입력 (QR 인식 안될 때)</button>
+    <button class="btn-manual" onclick="manualVinEntry()">⌨️ 차대번호 직접 입력 (QR 완전 손상 시)</button>
     <button class="btn-home" onclick="stopScannerAndHome()">🔙 모드 다시 선택하기</button>
   </div>
 
@@ -137,9 +136,22 @@
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbzP9rkRFf30-UBwDZkYzLrcelBiZdX_x_9G3I0ae1PqgBo3FYxSiE8_yNQSqZPB8pNYgA/exec";
 
-    let appData = null; let currentMode = ""; let currentUser = ""; let currentVin = ""; let isProcessing = false; let html5QrCode = null;
+    let appData = null; let currentMode = ""; let currentUser = ""; let currentVin = ""; let isProcessing = false;
     let myScannedVins = [];
-    let zoomCapRef = null; let torchCapRef = null; let torchOn = false;
+
+    // ===== 커스텀 스캐너 코어 상태 =====
+    let mediaStream = null;
+    let videoTrack = null;
+    let imageCaptureRef = null;
+    let rafId = null;
+    let isDecodePaused = false;
+    let failStreak = 0;
+    let lastStillAttemptTime = 0;
+    let lastDecodeAttempt = 0;
+    let nativeDetector = null;
+    if ("BarcodeDetector" in window) {
+      try { nativeDetector = new BarcodeDetector({ formats: ["qr_code"] }); } catch (e) { nativeDetector = null; }
+    }
     
     const PORT_LOCATIONS = {
       port: { dep: ["PIRT", "HPIT"], dest: ["PH선광", "배후부지", "AMF(서울우유)", "PCTC(한진)"] },
@@ -148,6 +160,8 @@
 
     window.onload = function() {
       updatePortDropdowns(); 
+      document.getElementById("engine-status").innerText =
+        (nativeDetector ? "네이티브 디코더 사용 가능 · " : "") + (window.ImageCapture ? "고해상도 정지사진 폴백 사용 가능" : "");
       fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { appData = data; showScreen("screen-home"); })
         .catch(err => { document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; });
     };
@@ -195,105 +209,190 @@
       document.getElementById("btn-show-list").classList.remove("hidden");
     }
 
-    // ================= 개선된 스캐너 시작 로직 =================
-    function startScanner(title, statusText) {
-      showScreen("screen-scanner"); document.getElementById("mode-title").innerText = title; document.getElementById("status-bar").innerText = statusText;
-      if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+    // ================= 커스텀 카메라 + 디코딩 코어 =================
+    async function startScanner(title, statusText) {
+      showScreen("screen-scanner");
+      document.getElementById("mode-title").innerText = title;
+      document.getElementById("status-bar").innerText = statusText;
+      failStreak = 0; isDecodePaused = false;
 
-      // 스캔박스를 화면 크기에 비례하도록 반응형으로 변경 (작은 QR도 가까이 대면 박스 안에 들어옴)
-      const config = {
-        fps: 10,
-        qrbox: function (viewfinderWidth, viewfinderHeight) {
-          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-          const size = Math.floor(minEdge * 0.85);
-          return { width: size, height: size };
-        },
-        aspectRatio: 1.0,
-        // 카메라 해상도를 최대한 높게 요청 -> 작은 QR도 픽셀 정보가 충분해짐
-        videoConstraints: {
-          facingMode: "environment",
-          width: { min: 1280, ideal: 1920, max: 2560 },
-          height: { min: 720, ideal: 1080, max: 1440 },
-          focusMode: "continuous"
-        },
-        // 브라우저 네이티브 바코드 디코더 사용 시도 (지원 안 되면 자동으로 기존 방식 사용)
-        experimentalFeatures: {
-          useBarCodeDetectorIfSupported: true
+      const video = document.getElementById("scanner-video");
+      video.classList.remove("camera-dimmed");
+
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            // 최대한 높은 해상도를 요청 -> 작은 QR도 픽셀 정보가 풍부해짐 (기기 지원 범위 내에서 자동 조정됨)
+            width: { min: 1280, ideal: 3840 },
+            height: { min: 720, ideal: 2160 },
+            advanced: [{ focusMode: "continuous" }]
+          },
+          audio: false
+        });
+        videoTrack = mediaStream.getVideoTracks()[0];
+        video.srcObject = mediaStream;
+        await video.play();
+
+        imageCaptureRef = null;
+        if (window.ImageCapture) {
+          try { imageCaptureRef = new ImageCapture(videoTrack); } catch (e) { imageCaptureRef = null; }
         }
-      };
 
-      html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
-        .then(() => {
-          setupZoomControl();
-          setupTorchControl();
-        })
-        .catch(err => alert("카메라 에러: " + err));
+        setupZoomControl();
+        setupTorchControl();
+
+        lastDecodeAttempt = 0;
+        rafId = requestAnimationFrame(decodeLoop);
+      } catch (err) {
+        alert("카메라 에러: " + err);
+      }
     }
 
-    // 광학/디지털 줌 컨트롤 - 기기가 지원할 때만 슬라이더 노출
+    async function decodeLoop() {
+      if (isProcessing || isDecodePaused) { rafId = requestAnimationFrame(decodeLoop); return; }
+
+      const now = performance.now();
+      if (now - lastDecodeAttempt < 90) { rafId = requestAnimationFrame(decodeLoop); return; } // 약 10~11fps로 제한 (배터리/발열 보호)
+      lastDecodeAttempt = now;
+
+      const video = document.getElementById("scanner-video");
+      if (!video.videoWidth || video.readyState < 2) { rafId = requestAnimationFrame(decodeLoop); return; }
+
+      const canvas = getScratchCanvas();
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+      // 화면 중앙 85% 영역만 잘라서 디코딩 (실제 촬영 해상도 기준 크롭이라 화질 손실 없음)
+      const vw = video.videoWidth, vh = video.videoHeight;
+      const boxSize = Math.floor(Math.min(vw, vh) * 0.85);
+      const sx = Math.floor((vw - boxSize) / 2);
+      const sy = Math.floor((vh - boxSize) / 2);
+      canvas.width = boxSize; canvas.height = boxSize;
+      ctx.drawImage(video, sx, sy, boxSize, boxSize, 0, 0, boxSize, boxSize);
+
+      let decoded = await tryDecodeCanvas(canvas, ctx);
+
+      if (decoded) {
+        failStreak = 0;
+        onScanSuccess(decoded);
+      } else {
+        failStreak++;
+        // 연속 실패가 약 1초 이상 누적되면, 센서 최대 해상도 정지사진으로 한 번 더 시도 (안드로이드 크롬 등 지원 기기만 작동)
+        if (imageCaptureRef && failStreak > 11 && now - lastStillAttemptTime > 1200) {
+          lastStillAttemptTime = now;
+          tryHighResStillDecode();
+        }
+      }
+
+      rafId = requestAnimationFrame(decodeLoop);
+    }
+
+    function getScratchCanvas() {
+      if (!getScratchCanvas._c) getScratchCanvas._c = document.createElement("canvas");
+      return getScratchCanvas._c;
+    }
+
+    async function tryDecodeCanvas(canvas, ctx) {
+      // 1순위: 브라우저 네이티브 디코더 (지원 기기에서 jsQR보다 정확도 높음)
+      if (nativeDetector) {
+        try {
+          const results = await nativeDetector.detect(canvas);
+          if (results && results.length > 0) return results[0].rawValue;
+        } catch (e) { /* 무시하고 jsQR로 폴백 */ }
+      }
+      // 2순위: jsQR + 대비 강화 전처리
+      if (window.jsQR) {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        enhanceContrast(imageData);
+        const result = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+        if (result) return result.data;
+      }
+      return null;
+    }
+
+    // 명암 대비를 늘려서(히스토그램 스트레칭) 흐리거나 인쇄 품질 낮은 QR의 인식률을 올림
+    function enhanceContrast(imageData) {
+      const data = imageData.data;
+      let min = 255, max = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const lum = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        if (lum < min) min = lum;
+        if (lum > max) max = lum;
+      }
+      const range = max - min || 1;
+      for (let i = 0; i < data.length; i += 4) {
+        for (let c = 0; c < 3; c++) {
+          data[i + c] = Math.min(255, Math.max(0, ((data[i + c] - min) / range) * 255));
+        }
+      }
+    }
+
+    // 센서 최대 해상도 정지사진 캡처 후 재시도 (영상 스트림보다 훨씬 고화질)
+    async function tryHighResStillDecode() {
+      try {
+        const blob = await imageCaptureRef.takePhoto();
+        const bitmap = await createImageBitmap(blob);
+        const size = Math.floor(Math.min(bitmap.width, bitmap.height) * 0.6);
+        const sx = Math.floor((bitmap.width - size) / 2);
+        const sy = Math.floor((bitmap.height - size) / 2);
+
+        const stillCanvas = document.createElement("canvas");
+        stillCanvas.width = size; stillCanvas.height = size;
+        const sctx = stillCanvas.getContext("2d", { willReadFrequently: true });
+        sctx.drawImage(bitmap, sx, sy, size, size, 0, 0, size, size);
+
+        const decoded = await tryDecodeCanvas(stillCanvas, sctx);
+        if (decoded) { failStreak = 0; onScanSuccess(decoded); }
+      } catch (e) {
+        console.log("고해상도 정지사진 캡처 미지원/실패 (일부 기기·브라우저는 정상적으로 건너뜀):", e);
+      }
+    }
+
     function setupZoomControl() {
       const slider = document.getElementById("zoom-slider");
       try {
-        const capabilities = html5QrCode.getRunningTrackCameraCapabilities();
-        const zoomCap = capabilities.zoomFeature ? capabilities.zoomFeature() : null;
-        if (zoomCap && zoomCap.isSupported()) {
-          zoomCapRef = zoomCap;
-          slider.min = zoomCap.min();
-          slider.max = zoomCap.max();
-          slider.step = zoomCap.step() || 0.1;
-          slider.value = zoomCap.value();
-          slider.classList.remove("hidden");
-        } else {
-          zoomCapRef = null; slider.classList.add("hidden");
-        }
-      } catch (e) {
-        zoomCapRef = null; slider.classList.add("hidden");
-        console.log("이 기기는 줌 기능을 지원하지 않습니다.", e);
-      }
+        const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+        if (caps.zoom) {
+          slider.min = caps.zoom.min; slider.max = caps.zoom.max; slider.step = caps.zoom.step || 0.1;
+          slider.value = caps.zoom.min; slider.classList.remove("hidden");
+        } else { slider.classList.add("hidden"); }
+      } catch (e) { slider.classList.add("hidden"); }
     }
 
     function onZoomInput(value) {
-      if (zoomCapRef) zoomCapRef.apply(parseFloat(value));
+      if (videoTrack) videoTrack.applyConstraints({ advanced: [{ zoom: parseFloat(value) }] }).catch(() => {});
     }
 
-    // 손전등 컨트롤 - 안드로이드 크롬 등 지원 기기에서만 버튼 노출 (iOS Safari는 미지원)
     function setupTorchControl() {
-      const torchBtn = document.getElementById("torch-btn");
-      torchOn = false; torchBtn.innerText = "💡 조명 켜기";
+      const btn = document.getElementById("torch-btn");
+      let torchOn = false;
       try {
-        const capabilities = html5QrCode.getRunningTrackCameraCapabilities();
-        const torchCap = capabilities.torchFeature ? capabilities.torchFeature() : null;
-        if (torchCap && torchCap.isSupported()) {
-          torchCapRef = torchCap;
-          torchBtn.classList.remove("hidden");
-          torchBtn.onclick = function () {
+        const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+        if (caps.torch) {
+          btn.classList.remove("hidden"); btn.innerText = "💡 조명 켜기";
+          btn.onclick = () => {
             torchOn = !torchOn;
-            torchCapRef.apply(torchOn);
-            torchBtn.innerText = torchOn ? "💡 조명 끄기" : "💡 조명 켜기";
+            videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(() => {});
+            btn.innerText = torchOn ? "💡 조명 끄기" : "💡 조명 켜기";
           };
-        } else {
-          torchCapRef = null; torchBtn.classList.add("hidden");
-        }
-      } catch (e) {
-        torchCapRef = null; torchBtn.classList.add("hidden");
-        console.log("이 기기는 조명(torch) 기능을 지원하지 않습니다.", e);
-      }
+        } else { btn.classList.add("hidden"); }
+      } catch (e) { btn.classList.add("hidden"); }
     }
 
-    // QR이 끝까지 안 잡힐 때를 위한 수동 입력 폴백
     function manualVinEntry() {
-      const vin = prompt("QR 인식이 어려운 경우, 차대번호(VIN)를 직접 입력하세요:");
-      if (vin && vin.trim()) {
-        onScanSuccess(vin.trim());
-      }
+      const vin = prompt("QR이 완전히 손상되어 인식이 불가능한 경우에만 사용하세요.\n차대번호(VIN)를 입력하세요:");
+      if (vin && vin.trim()) onScanSuccess(vin.trim());
     }
 
     function stopScannerAndHome() {
-      if (html5QrCode && html5QrCode.isScanning) { html5QrCode.stop().then(() => showScreen("screen-home")); } else { showScreen("screen-home"); }
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = null;
+      if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+      videoTrack = null; imageCaptureRef = null;
+      showScreen("screen-home");
       document.getElementById("pin-input").value = ""; document.getElementById("driver-input").value = ""; document.getElementById("port-driver-input").value = "";
       document.getElementById("zoom-slider").classList.add("hidden");
       document.getElementById("torch-btn").classList.add("hidden");
-      zoomCapRef = null; torchCapRef = null;
     }
 
     function onScanSuccess(decodedText) {
@@ -302,7 +401,7 @@
       const parts = decodedText.split('|');
       currentVin = parts[parts.length - 1].trim().toUpperCase();
       
-      document.getElementById("reader").classList.add("camera-dimmed"); document.getElementById("control-panel").style.display = "block"; document.getElementById("vin-display").innerText = currentVin;
+      document.getElementById("scanner-video").classList.add("camera-dimmed"); document.getElementById("control-panel").style.display = "block"; document.getElementById("vin-display").innerText = currentVin;
       
       const msg = document.getElementById("result-message"); const group = document.getElementById("action-group"); const locInput = document.getElementById("location-input"); const actionBtn = document.getElementById("main-action-btn");
       group.classList.add("hidden"); locInput.classList.add("hidden");
@@ -375,8 +474,9 @@
     }
 
     function resumeScanning() {
-      document.getElementById("control-panel").style.display = "none"; document.getElementById("location-input").value = ""; document.getElementById("result-message").innerText = ""; document.getElementById("reader").classList.remove("camera-dimmed");
-      setTimeout(() => { isProcessing = false; }, 500);
+      document.getElementById("control-panel").style.display = "none"; document.getElementById("location-input").value = ""; document.getElementById("result-message").innerText = ""; document.getElementById("scanner-video").classList.remove("camera-dimmed");
+      failStreak = 0;
+      setTimeout(() => { isProcessing = false; }, 400);
     }
 
     function showMyList() {
@@ -394,12 +494,12 @@
       }
       document.getElementById("my-list-count").innerText = myScannedVins.length;
       document.getElementById("screen-scanner").classList.add("hidden"); document.getElementById("screen-my-list").classList.remove("hidden");
-      if (html5QrCode && html5QrCode.isScanning) html5QrCode.pause();
+      isDecodePaused = true;
     }
 
     function hideMyList() {
       document.getElementById("screen-my-list").classList.add("hidden"); document.getElementById("screen-scanner").classList.remove("hidden");
-      if (html5QrCode) html5QrCode.resume();
+      isDecodePaused = false;
     }
 
     function deleteVin(vin) {
