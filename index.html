@@ -177,15 +177,37 @@
       if (!dep || !dest) return alert("출발지와 도착지를 모두 선택해주세요.");
       
       currentUser = driver; currentMode = "PORT"; myScannedVins = []; 
-      // 목록 보기 버튼 활성화
       startScanner(`🟠 ${typeName} 스캔 모드`, `기사명: ${currentUser} | 누적: 0대`);
       document.getElementById("btn-show-list").classList.remove("hidden");
     }
 
     function startScanner(title, statusText) {
-      showScreen("screen-scanner"); document.getElementById("mode-title").innerText = title; document.getElementById("status-bar").innerText = statusText;
+      showScreen("screen-scanner"); 
+      document.getElementById("mode-title").innerText = title; 
+      document.getElementById("status-bar").innerText = statusText;
+      
       if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
-      html5QrCode.start({ facingMode: "environment" }, { fps: 15, qrbox: { width: 250, height: 250 } }, onScanSuccess).catch(err => alert("카메라 에러"));
+
+      if (currentMode === "PORT") {
+        // 항/창고 전용: 고해상도, 연속 포커스, 2배 줌, 스캔 영역 축소(150px)
+        const portConfig = { fps: 20, qrbox: { width: 150, height: 150 }, aspectRatio: 1.777778 };
+        const portCameraConfig = { 
+          facingMode: "environment",
+          width: { min: 1280, ideal: 1920, max: 2560 },
+          height: { min: 720, ideal: 1080, max: 1440 },
+          advanced: [{ focusMode: "continuous" }, { zoom: 2.0 }]
+        };
+        html5QrCode.start(portCameraConfig, portConfig, onScanSuccess)
+          .catch(err => {
+             console.warn("기기가 고급 카메라 설정을 지원하지 않아 기본 설정으로 재시도합니다.", err);
+             html5QrCode.start({ facingMode: "environment" }, portConfig, onScanSuccess)
+               .catch(e => alert("카메라 권한을 확인해주세요."));
+          });
+      } else {
+        // 기존 야드/광명 전용: 기본 세팅 유지 (250px)
+        html5QrCode.start({ facingMode: "environment" }, { fps: 15, qrbox: { width: 250, height: 250 } }, onScanSuccess)
+          .catch(err => alert("카메라 권한을 확인해주세요."));
+      }
     }
 
     function stopScannerAndHome() {
@@ -262,7 +284,6 @@
                  if(type === 'port') { if(!appData.portLogs) appData.portLogs = {}; appData.portLogs[currentVin] = true; } 
                  else { if(!appData.whLogs) appData.whLogs = {}; appData.whLogs[currentVin] = true; }
                  
-                 // 리스트 추가 및 누적 대수 반영
                  myScannedVins.push(currentVin);
                  document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 누적: ${myScannedVins.length}대`;
                  alert("정상적으로 저장되었습니다.\n(누적: " + myScannedVins.length + "대)"); 
@@ -282,7 +303,6 @@
       if (myScannedVins.length === 0) { ul.innerHTML = "<li style='text-align:center; color:#999; display:block;'>아직 상차한 차량이 없습니다.</li>"; } 
       else {
         myScannedVins.forEach((vin, index) => {
-          // 광명 모드일때만 취소 버튼 노출, 항/창고는 확인용 텍스트만 노출
           const btnHtml = currentMode === "GM" ? `<button class="btn-delete" onclick="deleteVin('${vin}')">취소</button>` : `<span style="color:#888; font-size:14px;">(등록됨)</span>`;
           ul.innerHTML += `
             <li>
