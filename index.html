@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Tesla Hybrid Scanner V9 (Multi-Format)</title>
+  <title>Tesla Hybrid Scanner V2</title>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 10px; text-align: center; background-color: #f0f2f5; margin: 0; overflow-x: hidden; }
     h2, h3 { margin: 10px 0; color: #333; }
@@ -26,7 +26,7 @@
     input, select { width: 100%; padding: 15px; margin: 10px 0; font-size: 18px; border: 2px solid #ddd; border-radius: 8px; text-align: center; box-sizing: border-box; }
     
     #scanner-wrapper { position: relative; width: 100%; border-radius: 10px; overflow: hidden; background: #000; min-height: 250px; margin-top: 15px; }
-    #scanner-video { width: 100%; display: block; background: #000; }
+    #reader { width: 100%; }
     .camera-dimmed { opacity: 0.2; pointer-events: none; }
     
     #control-panel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); box-sizing: border-box; z-index: 10; display: none; }
@@ -47,19 +47,15 @@
     #my-list-ul li strong { font-size: 18px; color: #0056b3; display: block; margin-top: 3px;}
     .btn-delete { width: auto; padding: 8px 15px; margin: 0; background-color: #dc3545; color: white; font-size: 14px; border-radius: 5px; }
 
+    /* --- 추가: 줌 슬라이더 / 손전등 버튼 --- */
     #zoom-slider { width: 92%; margin: 15px auto 0; display: block; accent-color: #fd7e14; }
-    #focus-slider { width: 92%; margin: 15px auto 0; display: block; accent-color: #28a745; }
     #torch-btn { background-color: #343a40; color: #fff; width: auto; padding: 10px 22px; margin: 12px auto 0; display: block; font-size: 15px; }
-    #engine-status { font-size: 12px; color: #999; margin-top: 6px; }
-    #focus-label { font-size: 13px; color: #666; margin-top: 10px; }
-    #camera-debug { text-align: left; font-size: 11px; background: #f8f9fa; padding: 10px; border-radius: 8px; margin-top: 10px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; border: 1px solid #ddd; }
-    .btn-debug { background-color: #495057; color: white; }
+
+    /* --- 추가: 블루투스 바코드 스캐너건(HID) 웨지 입력용 - 화면엔 보이지 않음 --- */
+    #scanner-gun-input { position: absolute; opacity: 0; height: 0; width: 0; padding: 0; margin: 0; border: none; pointer-events: none; }
+    #gun-status { font-size: 13px; color: #999; margin-top: 8px; }
   </style>
-  <!-- html5-qrcode 제거, jsQR을 직접 제어하여 해상도/전처리/폴백을 전부 커스텀 제어 -->
-  <script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
-  <!-- ZXing: QR 외에 데이터매트릭스/아즈텍/PDF417/코드128·39 등 다양한 형식을 지원하는 순수 JS 라이브러리.
-       네이티브 브라우저 API(BarcodeDetector)에 의존하지 않아 아이폰 사파리 포함 모든 브라우저에서 동작함 -->
-  <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 </head>
 <body>
 
@@ -113,7 +109,7 @@
     <h3 id="mode-title">스캐너 작동 중</h3>
     <div id="status-bar"></div>
     <div id="scanner-wrapper">
-      <video id="scanner-video" playsinline muted autoplay></video>
+      <div id="reader"></div>
       <div id="control-panel">
         <p style="margin-top:0;">차대번호: <strong id="vin-display"></strong></p>
         <div id="result-message"></div>
@@ -125,20 +121,18 @@
       </div>
     </div>
 
-    <div id="focus-label" class="hidden">🔍 초점 거리 (왼쪽=가까이, 오른쪽=멀리)</div>
-    <input type="range" id="focus-slider" class="hidden" min="0" max="1" step="0.01" value="0" oninput="onFocusInput(this.value)">
+    <!-- 추가: 줌 슬라이더 (지원 기기에서만 자동 노출) -->
     <input type="range" id="zoom-slider" class="hidden" min="1" max="5" step="0.1" value="1" oninput="onZoomInput(this.value)">
+    <!-- 추가: 손전등 버튼 (지원 기기에서만 자동 노출, iOS Safari는 미지원이라 계속 숨김) -->
     <button id="torch-btn" class="hidden">💡 조명 켜기</button>
-    <div id="engine-status"></div>
-    <div id="camera-debug" class="hidden"></div>
+
+    <!-- 추가: 블루투스 바코드 스캐너건(HID) 웨지 입력 - 카메라와 별개로 항상 대기 -->
+    <input type="text" id="scanner-gun-input" autocomplete="off" inputmode="none" tabindex="-1">
+    <div id="gun-status">🔫 스캐너건 연결 시 자동 인식 대기 중</div>
 
     <button id="btn-show-list" class="btn-list hidden" onclick="showMyList()">📋 내가 상차한 차량 보기</button>
-    <button class="btn-manual" onclick="manualVinEntry()">⌨️ 차대번호 직접 입력 (QR 완전 손상 시)</button>
-    <button class="btn-debug" onclick="switchCamera()">🔁 다른 카메라 렌즈로 전환</button>
-    <button class="btn-debug" onclick="toggleResolutionMode()">🎚️ 해상도 낮춰서 테스트</button>
-    <button class="btn-debug" onclick="resetFocusToAuto()">↩️ 초점 자동으로 되돌리기</button>
-    <button class="btn-debug" onclick="toggleCameraDebug()">🔧 카메라 상세정보 보기 (문제 보고용)</button>
-    <button class="btn-debug" onclick="copyCameraDebug()">📋 위 정보 복사하기 (채팅에 붙여넣기용)</button>
+    <!-- 추가: QR 인식 불가 시 수동 입력 폴백 -->
+    <button class="btn-manual" onclick="manualVinEntry()">⌨️ 차대번호 직접 입력 (QR 인식 안될 때)</button>
     <button class="btn-home" onclick="stopScannerAndHome()">🔙 모드 다시 선택하기</button>
   </div>
 
@@ -151,50 +145,9 @@
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbzP9rkRFf30-UBwDZkYzLrcelBiZdX_x_9G3I0ae1PqgBo3FYxSiE8_yNQSqZPB8pNYgA/exec";
 
-    let appData = null; let currentMode = ""; let currentUser = ""; let currentVin = ""; let isProcessing = false;
+    let appData = null; let currentMode = ""; let currentUser = ""; let currentVin = ""; let isProcessing = false; let html5QrCode = null;
     let myScannedVins = [];
-
-    // ===== 커스텀 스캐너 코어 상태 =====
-    let mediaStream = null;
-    let videoTrack = null;
-    let imageCaptureRef = null;
-    let rafId = null;
-    let isDecodePaused = false;
-    let failStreak = 0;
-    let lastStillAttemptTime = 0;
-    let lastDecodeAttempt = 0;
-    let nativeDetector = null;
-    if ("BarcodeDetector" in window) {
-      try {
-        nativeDetector = new BarcodeDetector({
-          formats: ["qr_code", "data_matrix", "aztec", "pdf_417", "code_128", "code_39"]
-        });
-      } catch (e) { nativeDetector = null; }
-    }
-    // ZXing: QR 전용이 아닌 다중 포맷 디코더 - 네이티브 API가 없는 아이폰 사파리 등에서도 동작
-    let zxingReader = null;
-    if (window.ZXing) {
-      try {
-        const hints = new Map();
-        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-          ZXing.BarcodeFormat.QR_CODE,
-          ZXing.BarcodeFormat.DATA_MATRIX,
-          ZXing.BarcodeFormat.AZTEC,
-          ZXing.BarcodeFormat.PDF_417,
-          ZXing.BarcodeFormat.CODE_128,
-          ZXing.BarcodeFormat.CODE_39
-        ]);
-        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-        zxingReader = new ZXing.MultiFormatReader();
-        zxingReader.setHints(hints);
-      } catch (e) { zxingReader = null; }
-    }
-    let textDetector = null;
-    if ("TextDetector" in window) {
-      try { textDetector = new TextDetector(); } catch (e) { textDetector = null; }
-    }
-    let lastOcrAttemptTime = 0;
-    let availableCams = []; let currentCamIndex = -1;
+    let zoomCapRef = null; let torchCapRef = null; let torchOn = false;
     
     const PORT_LOCATIONS = {
       port: { dep: ["PIRT", "HPIT"], dest: ["PH선광", "배후부지", "AMF(서울우유)", "PCTC(한진)"] },
@@ -203,11 +156,6 @@
 
     window.onload = function() {
       updatePortDropdowns(); 
-      document.getElementById("engine-status").innerText =
-        (nativeDetector ? "네이티브 디코더(다중포맷) ✅ · " : "네이티브 디코더 ❌ · ") +
-        (zxingReader ? "ZXing 다중포맷 ✅ · " : "ZXing ❌ · ") +
-        (textDetector ? "문자인식(OCR) ✅ · " : "문자인식(OCR) ❌ · ") +
-        (window.ImageCapture ? "고해상도 정지사진 폴백 ✅" : "고해상도 정지사진 폴백 ❌");
       fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { appData = data; showScreen("screen-home"); })
         .catch(err => { document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; });
     };
@@ -255,370 +203,152 @@
       document.getElementById("btn-show-list").classList.remove("hidden");
     }
 
-    // ================= 커스텀 카메라 + 디코딩 코어 =================
-    async function startScanner(title, statusText) {
-      showScreen("screen-scanner");
-      lastTitle = title; lastStatusText = statusText;
-      document.getElementById("mode-title").innerText = title;
-      document.getElementById("status-bar").innerText = statusText;
-      failStreak = 0; isDecodePaused = false;
-
-      const video = document.getElementById("scanner-video");
-      video.classList.remove("camera-dimmed");
-
-      try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: "environment" },
-            width: useLowRes ? { ideal: 1280 } : { min: 1280, ideal: 3840 },
-            height: useLowRes ? { ideal: 720 } : { min: 720, ideal: 2160 },
-            focusMode: "continuous",
-            advanced: [{ focusMode: "continuous" }]
-          },
-          audio: false
+    // ================= 개선된 스캐너 시작 로직 =================
+    function startScanner(title, statusText) {
+      showScreen("screen-scanner"); document.getElementById("mode-title").innerText = title; document.getElementById("status-bar").innerText = statusText;
+      if (!html5QrCode) {
+        // QR코드 외에 데이터매트릭스, 아즈텍, PDF417, 코드128/39 등 다른 형식의 코드도 함께 인식하도록 명시적으로 지정
+        html5QrCode = new Html5Qrcode("reader", {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.DATA_MATRIX,
+            Html5QrcodeSupportedFormats.AZTEC,
+            Html5QrcodeSupportedFormats.PDF_417,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39
+          ]
         });
-        videoTrack = mediaStream.getVideoTracks()[0];
-        video.srcObject = mediaStream;
-        await video.play();
+      }
 
-        imageCaptureRef = null;
-        if (window.ImageCapture) {
-          try { imageCaptureRef = new ImageCapture(videoTrack); } catch (e) { imageCaptureRef = null; }
+      // 스캔박스를 화면 크기에 비례하도록 반응형으로 변경 (작은 QR도 가까이 대면 박스 안에 들어옴)
+      const config = {
+        fps: 10,
+        qrbox: function (viewfinderWidth, viewfinderHeight) {
+          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+          const size = Math.floor(minEdge * 0.85);
+          return { width: size, height: size };
+        },
+        aspectRatio: 1.0,
+        // 카메라 해상도를 최대한 높게 요청 -> 작은 QR도 픽셀 정보가 충분해짐
+        videoConstraints: {
+          facingMode: "environment",
+          width: { min: 1280, ideal: 1920, max: 2560 },
+          height: { min: 720, ideal: 1080, max: 1440 },
+          focusMode: "continuous"
+        },
+        // 브라우저 네이티브 바코드 디코더 사용 시도 (지원 안 되면 자동으로 기존 방식 사용)
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
         }
-
-        setupZoomControl();
-        setupTorchControl();
-        setupFocusControl();
-        refreshCameraList();
-        setupTapToRefocus();
-
-        lastDecodeAttempt = 0;
-        rafId = requestAnimationFrame(decodeLoop);
-      } catch (err) {
-        alert("카메라 에러: " + err);
-      }
-    }
-
-    // 사용 가능한 카메라 렌즈 목록 갱신 (권한 허용 후에만 label이 채워짐)
-    async function refreshCameraList() {
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        availableCams = devices.filter(d => d.kind === "videoinput");
-      } catch (e) { availableCams = []; }
-    }
-
-    // 여러 후면 렌즈(광각/초광각/망원 등)가 잡히는 기기에서, 매크로 초점이 더 잘 되는
-    // 렌즈로 수동 전환해볼 수 있게 함 (facingMode:"environment"는 기본 렌즈만 선택하는 경우가 많음)
-    async function switchCamera() {
-      if (availableCams.length === 0) await refreshCameraList();
-      if (availableCams.length <= 1) { alert("이 기기/브라우저에서는 전환 가능한 다른 카메라가 감지되지 않았습니다."); return; }
-
-      currentCamIndex = (currentCamIndex + 1) % availableCams.length;
-      const chosen = availableCams[currentCamIndex];
-
-      if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
-      try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { deviceId: { exact: chosen.deviceId }, width: { ideal: 3840 }, height: { ideal: 2160 } },
-          audio: false
-        });
-        videoTrack = mediaStream.getVideoTracks()[0];
-        const video = document.getElementById("scanner-video");
-        video.srcObject = mediaStream;
-        await video.play();
-        imageCaptureRef = window.ImageCapture ? (function(){ try { return new ImageCapture(videoTrack); } catch(e){ return null; } })() : null;
-        setupZoomControl(); setupTorchControl(); setupFocusControl();
-        alert("카메라 전환됨: " + (chosen.label || ("카메라 " + (currentCamIndex + 1) + "/" + availableCams.length)));
-      } catch (e) {
-        alert("전환 실패: " + e);
-      }
-    }
-
-    // 수동 초점 거리 제어 - 기기가 focusDistance를 노출하는 경우에만 슬라이더 표시
-    // 우리 용도는 항상 근접 촬영이므로 시작 시 기본값을 "가까이" 쪽으로 맞춰둠
-    function setupFocusControl() {
-      const slider = document.getElementById("focus-slider");
-      const label = document.getElementById("focus-label");
-      try {
-        const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
-        if (caps.focusDistance) {
-          slider.min = caps.focusDistance.min; slider.max = caps.focusDistance.max; slider.step = caps.focusDistance.step || 0.01;
-          slider.value = caps.focusDistance.min;
-          slider.classList.remove("hidden"); label.classList.remove("hidden");
-          // 주의: 여기서 자동으로 manual 모드를 걸지 않음. 기기가 실제 수동 렌즈 제어를 지원 안 하면
-          // 오히려 기존에 잘 돌아가던 자동초점(continuous AF)까지 깨질 수 있어서, 사용자가 슬라이더를
-          // 직접 움직였을 때만(onFocusInput) 적용함.
-        } else {
-          slider.classList.add("hidden"); label.classList.add("hidden");
-        }
-      } catch (e) {
-        slider.classList.add("hidden"); label.classList.add("hidden");
-      }
-    }
-
-    function resetFocusToAuto() {
-      if (!videoTrack) return;
-      videoTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] })
-        .then(() => alert("자동 초점(continuous)으로 되돌렸습니다."))
-        .catch(() => alert("이 기기는 초점 모드 전환 자체가 반영되지 않습니다 (원래부터 자동 모드였을 가능성이 높습니다)."));
-    }
-
-    // 화면을 탭하면 초점 모드를 순간적으로 바꿨다가 되돌려서, 카메라가 새로 초점을
-    // 다시 잡도록 강제로 유도함 (continuous AF가 첫 프레임에 고정된 채 안 풀리는 기기용 우회책)
-    function setupTapToRefocus() {
-      const video = document.getElementById("scanner-video");
-      video.onclick = async () => {
-        if (!videoTrack) return;
-        try {
-          const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
-          const modes = caps.focusMode || [];
-          if (modes.includes("single-shot")) {
-            await videoTrack.applyConstraints({ advanced: [{ focusMode: "single-shot" }] }).catch(() => {});
-            setTimeout(() => { videoTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {}); }, 600);
-          } else if (modes.includes("manual") && modes.includes("continuous")) {
-            await videoTrack.applyConstraints({ advanced: [{ focusMode: "manual" }] }).catch(() => {});
-            await new Promise(r => setTimeout(r, 150));
-            await videoTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
-          }
-        } catch (e) { console.log("탭 재포커스 시도 실패:", e); }
       };
+
+      html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
+        .then(() => {
+          setupZoomControl();
+          setupTorchControl();
+          focusGunInput();
+        })
+        .catch(err => alert("카메라 에러: " + err));
     }
 
-    let useLowRes = false; let lastTitle = ""; let lastStatusText = "";
-    async function toggleResolutionMode() {
-      useLowRes = !useLowRes;
-      alert(useLowRes ? "다음부터 낮은 해상도(720p)로 테스트합니다. 다시 스캔을 시작합니다." : "다음부터 다시 고해상도로 시도합니다. 다시 스캔을 시작합니다.");
-      if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
-      await startScanner(lastTitle, lastStatusText);
+    // ================= 블루투스 바코드 스캐너건(HID) 웨지 입력 =================
+    // 스캐너건은 연결되면 OS에 "키보드"로 인식됨 -> 이 보이지 않는 입력창이 포커스를
+    // 갖고 있으면, 스캔한 값이 그대로 타이핑되고 마지막에 Enter가 자동으로 눌림.
+    function focusGunInput() {
+      const el = document.getElementById("scanner-gun-input");
+      if (el) { el.value = ""; el.focus({ preventScroll: true }); }
     }
 
-    function onFocusInput(value) {
-      if (videoTrack) videoTrack.applyConstraints({ advanced: [{ focusMode: "manual", focusDistance: parseFloat(value) }] }).catch(() => {});
-    }
+    (function initGunInputListener() {
+      document.addEventListener("DOMContentLoaded", () => {
+        const gunInput = document.getElementById("scanner-gun-input");
+        if (!gunInput) return;
 
-    // 이 기기의 카메라가 브라우저에 실제로 어떤 제어권을 넘겨주는지 그대로 확인 (문제 보고 시 이 내용을 캡처해서 공유해주면 정확한 진단 가능)
-    function toggleCameraDebug() {
-      const el = document.getElementById("camera-debug");
-      let caps = {};
-      try { caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {}; } catch (e) {}
-      el.innerText = "기기: " + navigator.userAgent + "\n\n선택된 카메라: " + (availableCams[currentCamIndex] ? availableCams[currentCamIndex].label : "기본") +
-        "\n\n카메라 능력치(getCapabilities):\n" + JSON.stringify(caps, null, 2);
-      el.classList.toggle("hidden");
-    }
+        gunInput.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            const val = this.value.trim();
+            this.value = "";
+            if (val && !isProcessing) onScanSuccess(val);
+          }
+        });
 
-    function copyCameraDebug() {
-      const el = document.getElementById("camera-debug");
-      if (el.classList.contains("hidden") || !el.innerText) { toggleCameraDebug(); }
-      const text = document.getElementById("camera-debug").innerText;
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text)
-          .then(() => alert("복사되었습니다. 채팅창에 붙여넣어 주세요."))
-          .catch(() => alert("복사 실패 - 화면을 스크롤하며 캡처해서 보내주세요."));
-      } else {
-        alert("이 브라우저는 자동 복사가 지원 안 됩니다 - 화면을 스크롤하며 캡처해서 보내주세요.");
-      }
-    }
+        // 스캐너 화면에서 "결과 대기 상태"일 때만 주기적으로 포커스를 되돌려줌
+        // (위치 입력창 등에 직접 타이핑 중일 때는 방해하지 않음)
+        setInterval(() => {
+          const scannerVisible = !document.getElementById("screen-scanner").classList.contains("hidden");
+          const controlPanelOpen = document.getElementById("control-panel").style.display === "block";
+          if (scannerVisible && !controlPanelOpen && document.activeElement !== gunInput) {
+            gunInput.focus({ preventScroll: true });
+          }
+        }, 700);
+      });
+    })();
 
-    async function decodeLoop() {
-      if (isProcessing || isDecodePaused) { rafId = requestAnimationFrame(decodeLoop); return; }
-
-      const now = performance.now();
-      if (now - lastDecodeAttempt < 90) { rafId = requestAnimationFrame(decodeLoop); return; } // 약 10~11fps로 제한 (배터리/발열 보호)
-      lastDecodeAttempt = now;
-
-      const video = document.getElementById("scanner-video");
-      if (!video.videoWidth || video.readyState < 2) { rafId = requestAnimationFrame(decodeLoop); return; }
-
-      const canvas = getScratchCanvas();
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-
-      // 화면 중앙 85% 영역만 잘라서 디코딩 (실제 촬영 해상도 기준 크롭이라 화질 손실 없음)
-      const vw = video.videoWidth, vh = video.videoHeight;
-      const boxSize = Math.floor(Math.min(vw, vh) * 0.85);
-      const sx = Math.floor((vw - boxSize) / 2);
-      const sy = Math.floor((vh - boxSize) / 2);
-      canvas.width = boxSize; canvas.height = boxSize;
-      ctx.drawImage(video, sx, sy, boxSize, boxSize, 0, 0, boxSize, boxSize);
-
-      let decoded = await tryDecodeCanvas(canvas, ctx);
-
-      if (decoded) {
-        failStreak = 0;
-        onScanSuccess(decoded);
-      } else {
-        failStreak++;
-        // QR이 계속 안 잡히면, 화면 전체에서 인쇄된 차대번호 "글자"를 직접 읽어보는 시도(OCR)를 추가로 함
-        // (QR은 작아서 안 잡혀도, 옆의 큰 글자는 지금 초점 상태로도 읽힐 수 있음)
-        if (textDetector && failStreak > 5 && now - lastOcrAttemptTime > 500) {
-          lastOcrAttemptTime = now;
-          tryFullFrameOcr(video);
-        }
-        if (imageCaptureRef && failStreak > 11 && now - lastStillAttemptTime > 1200) {
-          lastStillAttemptTime = now;
-          tryHighResStillDecode();
-        }
-      }
-
-      rafId = requestAnimationFrame(decodeLoop);
-    }
-
-    function getScratchCanvas() {
-      if (!getScratchCanvas._c) getScratchCanvas._c = document.createElement("canvas");
-      return getScratchCanvas._c;
-    }
-
-    async function tryDecodeCanvas(canvas, ctx) {
-      // 1순위: 브라우저 네이티브 디코더 (안드로이드 크롬 등 지원 기기, 다중 포맷)
-      if (nativeDetector) {
-        try {
-          const results = await nativeDetector.detect(canvas);
-          if (results && results.length > 0) return results[0].rawValue;
-        } catch (e) { /* 무시하고 다음 엔진으로 폴백 */ }
-      }
-
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-      // 2순위: ZXing (QR/데이터매트릭스/아즈텍/PDF417/코드128·39 등 다중 포맷, 아이폰 사파리 포함 전 브라우저 동작)
-      const zxingResult = tryZxingDecode(imageData);
-      if (zxingResult) return zxingResult;
-
-      // 3순위(최후 폴백): jsQR + 대비 강화 전처리 - QR 전용
-      if (window.jsQR) {
-        enhanceContrast(imageData);
-        const result = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
-        if (result) return result.data;
-      }
-      return null;
-    }
-
-    function tryZxingDecode(imageData) {
-      if (!zxingReader || !window.ZXing) return null;
-      try {
-        const luminanceSource = new ZXing.RGBLuminanceSource(imageData.data, imageData.width, imageData.height);
-        const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
-        const result = zxingReader.decode(binaryBitmap);
-        return result.getText();
-      } catch (e) {
-        return null; // NotFoundException 등 - 그냥 못 찾은 것으로 처리하고 다음 엔진으로 넘어감
-      }
-    }
-
-    // 명암 대비를 늘려서(히스토그램 스트레칭) 흐리거나 인쇄 품질 낮은 QR의 인식률을 올림
-    function enhanceContrast(imageData) {
-      const data = imageData.data;
-      let min = 255, max = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        const lum = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-        if (lum < min) min = lum;
-        if (lum > max) max = lum;
-      }
-      const range = max - min || 1;
-      for (let i = 0; i < data.length; i += 4) {
-        for (let c = 0; c < 3; c++) {
-          data[i + c] = Math.min(255, Math.max(0, ((data[i + c] - min) / range) * 255));
-        }
-      }
-    }
-
-    // 센서 최대 해상도 정지사진 캡처 후 재시도 (영상 스트림보다 훨씬 고화질)
-    async function tryHighResStillDecode() {
-      try {
-        const blob = await imageCaptureRef.takePhoto();
-        const bitmap = await createImageBitmap(blob);
-        const size = Math.floor(Math.min(bitmap.width, bitmap.height) * 0.6);
-        const sx = Math.floor((bitmap.width - size) / 2);
-        const sy = Math.floor((bitmap.height - size) / 2);
-
-        const stillCanvas = document.createElement("canvas");
-        stillCanvas.width = size; stillCanvas.height = size;
-        const sctx = stillCanvas.getContext("2d", { willReadFrequently: true });
-        sctx.drawImage(bitmap, sx, sy, size, size, 0, 0, size, size);
-
-        const decoded = await tryDecodeCanvas(stillCanvas, sctx);
-        if (decoded) { failStreak = 0; onScanSuccess(decoded); }
-      } catch (e) {
-        console.log("고해상도 정지사진 캡처 미지원/실패 (일부 기기·브라우저는 정상적으로 건너뜀):", e);
-      }
-    }
-
-    // 화면 전체에서 인쇄된 차대번호(17자리) 문자를 직접 읽어보는 시도 (QR 우회 경로)
-    const VIN_REGEX = /[A-HJ-NPR-Z0-9]{17}/; // VIN 규격상 I, O, Q는 쓰이지 않음
-
-    async function tryOcrVin(canvas) {
-      if (!textDetector) return null;
-      try {
-        const results = await textDetector.detect(canvas);
-        for (const r of results) {
-          const cleaned = (r.rawValue || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-          const match = cleaned.match(VIN_REGEX);
-          if (match) return match[0];
-        }
-      } catch (e) { /* 무시 */ }
-      return null;
-    }
-
-    async function tryFullFrameOcr(video) {
-      try {
-        const canvas = document.createElement("canvas");
-        const scale = Math.min(1, 1280 / video.videoWidth);
-        canvas.width = Math.floor(video.videoWidth * scale);
-        canvas.height = Math.floor(video.videoHeight * scale);
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const vin = await tryOcrVin(canvas);
-        if (vin) { failStreak = 0; onScanSuccess(vin); }
-      } catch (e) { console.log("OCR 시도 실패:", e); }
-    }
-
+    // 광학/디지털 줌 컨트롤 - 기기가 지원할 때만 슬라이더 노출
     function setupZoomControl() {
       const slider = document.getElementById("zoom-slider");
       try {
-        const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
-        if (caps.zoom) {
-          slider.min = caps.zoom.min; slider.max = caps.zoom.max; slider.step = caps.zoom.step || 0.1;
-          slider.value = caps.zoom.min; slider.classList.remove("hidden");
-        } else { slider.classList.add("hidden"); }
-      } catch (e) { slider.classList.add("hidden"); }
+        const capabilities = html5QrCode.getRunningTrackCameraCapabilities();
+        const zoomCap = capabilities.zoomFeature ? capabilities.zoomFeature() : null;
+        if (zoomCap && zoomCap.isSupported()) {
+          zoomCapRef = zoomCap;
+          slider.min = zoomCap.min();
+          slider.max = zoomCap.max();
+          slider.step = zoomCap.step() || 0.1;
+          slider.value = zoomCap.value();
+          slider.classList.remove("hidden");
+        } else {
+          zoomCapRef = null; slider.classList.add("hidden");
+        }
+      } catch (e) {
+        zoomCapRef = null; slider.classList.add("hidden");
+        console.log("이 기기는 줌 기능을 지원하지 않습니다.", e);
+      }
     }
 
     function onZoomInput(value) {
-      if (videoTrack) videoTrack.applyConstraints({ advanced: [{ zoom: parseFloat(value) }] }).catch(() => {});
+      if (zoomCapRef) zoomCapRef.apply(parseFloat(value));
     }
 
+    // 손전등 컨트롤 - 안드로이드 크롬 등 지원 기기에서만 버튼 노출 (iOS Safari는 미지원)
     function setupTorchControl() {
-      const btn = document.getElementById("torch-btn");
-      let torchOn = false;
+      const torchBtn = document.getElementById("torch-btn");
+      torchOn = false; torchBtn.innerText = "💡 조명 켜기";
       try {
-        const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
-        if (caps.torch) {
-          btn.classList.remove("hidden"); btn.innerText = "💡 조명 켜기";
-          btn.onclick = () => {
+        const capabilities = html5QrCode.getRunningTrackCameraCapabilities();
+        const torchCap = capabilities.torchFeature ? capabilities.torchFeature() : null;
+        if (torchCap && torchCap.isSupported()) {
+          torchCapRef = torchCap;
+          torchBtn.classList.remove("hidden");
+          torchBtn.onclick = function () {
             torchOn = !torchOn;
-            videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(() => {});
-            btn.innerText = torchOn ? "💡 조명 끄기" : "💡 조명 켜기";
+            torchCapRef.apply(torchOn);
+            torchBtn.innerText = torchOn ? "💡 조명 끄기" : "💡 조명 켜기";
           };
-        } else { btn.classList.add("hidden"); }
-      } catch (e) { btn.classList.add("hidden"); }
+        } else {
+          torchCapRef = null; torchBtn.classList.add("hidden");
+        }
+      } catch (e) {
+        torchCapRef = null; torchBtn.classList.add("hidden");
+        console.log("이 기기는 조명(torch) 기능을 지원하지 않습니다.", e);
+      }
     }
 
+    // QR이 끝까지 안 잡힐 때를 위한 수동 입력 폴백
     function manualVinEntry() {
-      const vin = prompt("QR이 완전히 손상되어 인식이 불가능한 경우에만 사용하세요.\n차대번호(VIN)를 입력하세요:");
-      if (vin && vin.trim()) onScanSuccess(vin.trim());
+      const vin = prompt("QR 인식이 어려운 경우, 차대번호(VIN)를 직접 입력하세요:");
+      if (vin && vin.trim()) {
+        onScanSuccess(vin.trim());
+      }
     }
 
     function stopScannerAndHome() {
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = null;
-      if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
-      videoTrack = null; imageCaptureRef = null;
-      showScreen("screen-home");
+      if (html5QrCode && html5QrCode.isScanning) { html5QrCode.stop().then(() => showScreen("screen-home")); } else { showScreen("screen-home"); }
       document.getElementById("pin-input").value = ""; document.getElementById("driver-input").value = ""; document.getElementById("port-driver-input").value = "";
       document.getElementById("zoom-slider").classList.add("hidden");
       document.getElementById("torch-btn").classList.add("hidden");
-      document.getElementById("focus-slider").classList.add("hidden");
-      document.getElementById("focus-label").classList.add("hidden");
-      document.getElementById("camera-debug").classList.add("hidden");
-      currentCamIndex = -1;
+      zoomCapRef = null; torchCapRef = null;
     }
 
     function onScanSuccess(decodedText) {
@@ -627,7 +357,7 @@
       const parts = decodedText.split('|');
       currentVin = parts[parts.length - 1].trim().toUpperCase();
       
-      document.getElementById("scanner-video").classList.add("camera-dimmed"); document.getElementById("control-panel").style.display = "block"; document.getElementById("vin-display").innerText = currentVin;
+      document.getElementById("reader").classList.add("camera-dimmed"); document.getElementById("control-panel").style.display = "block"; document.getElementById("vin-display").innerText = currentVin;
       
       const msg = document.getElementById("result-message"); const group = document.getElementById("action-group"); const locInput = document.getElementById("location-input"); const actionBtn = document.getElementById("main-action-btn");
       group.classList.add("hidden"); locInput.classList.add("hidden");
@@ -700,9 +430,8 @@
     }
 
     function resumeScanning() {
-      document.getElementById("control-panel").style.display = "none"; document.getElementById("location-input").value = ""; document.getElementById("result-message").innerText = ""; document.getElementById("scanner-video").classList.remove("camera-dimmed");
-      failStreak = 0;
-      setTimeout(() => { isProcessing = false; }, 400);
+      document.getElementById("control-panel").style.display = "none"; document.getElementById("location-input").value = ""; document.getElementById("result-message").innerText = ""; document.getElementById("reader").classList.remove("camera-dimmed");
+      setTimeout(() => { isProcessing = false; focusGunInput(); }, 500);
     }
 
     function showMyList() {
@@ -720,12 +449,12 @@
       }
       document.getElementById("my-list-count").innerText = myScannedVins.length;
       document.getElementById("screen-scanner").classList.add("hidden"); document.getElementById("screen-my-list").classList.remove("hidden");
-      isDecodePaused = true;
+      if (html5QrCode && html5QrCode.isScanning) html5QrCode.pause();
     }
 
     function hideMyList() {
       document.getElementById("screen-my-list").classList.add("hidden"); document.getElementById("screen-scanner").classList.remove("hidden");
-      isDecodePaused = false;
+      if (html5QrCode) html5QrCode.resume();
     }
 
     function deleteVin(vin) {
