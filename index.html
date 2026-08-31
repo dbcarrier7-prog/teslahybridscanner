@@ -289,10 +289,13 @@
       saveState(); // 화면이 넘어가기 전에 정보 저장
       const vURL = "https://teslahybridscanner.vercel.app/?scanned={CODE}";
       const callbackUrl = encodeURIComponent(vURL);
-      const fallbackUrl = encodeURIComponent("https://play.google.com/store/apps/details?id=com.google.zxing.client.android");
       
-      // 앱이 있으면 바로 스캔 화면을 띄우고, 없으면 플레이스토어로 이동시킵니다.
-      const intentUrl = `intent://scan/#Intent;scheme=zxing;package=com.google.zxing.client.android;S.ret=${callbackUrl};S.browser_fallback_url=${fallbackUrl};end`;
+      // Binary Eye 플레이스토어 설치 주소
+      const fallbackUrl = encodeURIComponent("https://play.google.com/store/apps/details?id=com.teacapps.barcodescanner");
+      
+      // Binary Eye 앱 강제 실행 (없으면 fallbackUrl로 이동)
+      const intentUrl = `intent://scan/#Intent;scheme=zxing;package=com.teacapps.barcodescanner;S.ret=${callbackUrl};S.browser_fallback_url=${fallbackUrl};end`;
+      
       window.location.href = intentUrl;
     }
 
