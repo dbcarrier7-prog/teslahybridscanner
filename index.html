@@ -96,12 +96,11 @@
     <div id="status-bar"></div>
     
     <div style="margin: 20px 0; font-size:15px; background: #e8f4fd; padding: 15px; border-radius: 8px;">
-      <p style="margin:0;">💡 <b>스캔 방법:</b><br>바탕화면의 <b>[스캔 앱]</b>으로 QR을 찍으시면<br>이 화면으로 바로 연동됩니다.</p>
+      <p style="margin:0;">💡 <b>스캔 방법:</b><br>Binary Eye 앱으로 QR을 찍으시면<br>인증 정보가 필터링되고 차대번호만 자동 저장됩니다.</p>
     </div>
 
-    <!-- 결과 확인 및 저장 패널 -->
     <div id="control-panel" class="hidden">
-      <p style="margin-top:0;">인식된 차대번호:<br><strong id="vin-display"></strong></p>
+      <p style="margin-top:0;">추출된 차대번호:<br><strong id="vin-display"></strong></p>
       <div id="result-message"></div>
       
       <div id="action-group" class="hidden">
@@ -150,7 +149,7 @@
            
            if (scannedText) {
              window.history.replaceState({}, document.title, window.location.pathname);
-             onScanSuccess(scannedText); // 앱이 넘겨준 데이터 즉시 판독 실행
+             onScanSuccess(scannedText); // 앱이 넘겨준 복잡한 텍스트 필터링 시작
            }
         } else {
            showScreen("screen-home"); 
@@ -268,12 +267,40 @@
       isProcessing = false;
     }
 
-    // ★ 스캔 성공 시 데이터 분석 및 처리 판독
+    // ★ [핵심] 복잡한 텍스트에서 17자리 차대번호만 정밀 발라내는 필터링 파서
+    function extractVin(rawText) {
+      if (!rawText) return "";
+      let cleanText = rawText.trim();
+      
+      // 만약 파이프(|)나 특수문자로 구분되어 있다면 분리해서 검사
+      const parts = cleanText.split(/[\|\,\;\s]+/);
+      for (let p of parts) {
+        let candidate = p.trim().toUpperCase();
+        // 17자리이면서 I, O, Q(차대번호에 쓰이지 않는 영문)가 없는 표준 차대번호 패턴 검증
+        if (candidate.length === 17 && /^[A-HJ-NPR-Z0-9]{17}$/.test(candidate)) {
+          return candidate;
+        }
+      }
+      
+      // 구분자로 안 찾아지면 전체 텍스트 안에서 17자리 영숫자 조합을 강제로 탐색
+      const match = cleanText.match(/[A-HJ-NPR-Z0-9]{17}/);
+      if (match) {
+        return match[0].toUpperCase();
+      }
+      
+      // 최후의 수단: 단순히 맨 뒤 17자리 추출
+      if (cleanText.length >= 17) {
+        return cleanText.slice(-17).toUpperCase();
+      }
+      
+      return cleanText.toUpperCase();
+    }
+
     function onScanSuccess(decodedText) {
       if (!appData) return; 
       
-      const parts = decodedText.split('|');
-      currentVin = parts[parts.length - 1].trim().toUpperCase();
+      // 휑한 텍스트에서 인증 정보 싹 빼고 17자리 차대번호만 추출
+      currentVin = extractVin(decodedText);
       
       const cp = document.getElementById("control-panel");
       cp.classList.remove("hidden");
@@ -287,7 +314,7 @@
       group.classList.add("hidden"); locInput.classList.add("hidden");
 
       if(currentVin.length !== 17) {
-         msg.className = "msg-error"; msg.innerText = "❌ 올바른 17자리 차대번호가 아닙니다.";
+         msg.className = "msg-error"; msg.innerText = "❌ 올바른 17자리 차대번호가 아닙니다. (인식된 텍스트: " + decodedText + ")";
          return;
       }
 
@@ -300,9 +327,8 @@
         if (!appData.gmTargets[currentVin]) { msg.className = "msg-error"; msg.innerText = "❌ 광명딜리버리센터 운송 차량이 아닙니다."; }
         else if (appData.gmLogs[currentVin]) { msg.className = "msg-warn"; msg.innerText = "⚠️ 이미 상차 완료된 차량입니다."; }
         else { 
-           // 항/창고와 마찬가지로 광명도 앱 스캔 즉시 바로 서버로 쏠 수 있게 처리
            msg.className = "msg-success"; msg.innerText = "✅ 상차 가능 차량 (자동 처리 중...)"; 
-           processAction(); // 자동 저장 실행
+           processAction(); 
         }
       } else if (currentMode === "PORT") {
         const type = document.querySelector('input[name="portWorkType"]:checked').value;
@@ -311,14 +337,12 @@
         if (isAlreadyScanned) { 
            msg.className = "msg-warn"; msg.innerText = "⚠️ 이미 등록된 차량입니다."; 
         } else {
-           // ★ 핵심 수정: 항/창고 작업은 앱으로 찍으면 버튼 누를 필요 없이 즉시 서버로 저장되게 자동화
            msg.className = "msg-success"; msg.innerText = "✅ 정상 차량 (자동 저장 중...)"; 
-           processAction(); // 자동 저장 실행
+           processAction(); 
         }
       }
     }
 
-    // ★ 서버로 데이터 전송 및 시트 기록 함수
     function processAction() {
       const msg = document.getElementById("result-message"); 
       const safeVin = encodeURIComponent(currentVin); 
@@ -355,11 +379,10 @@
                  saveState(); 
                  document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 누적: ${myScannedVins.length}대`;
                  
-                 // 성공 피드백 알림
                  msg.className = "msg-success";
                  msg.innerText = `✅ [저장완료] ${currentVin} (누적: ${myScannedVins.length}대)`;
                  
-                 setTimeout(() => { resetScanPanel(); }, 1500); // 1.5초 후 다음 스캔 대기
+                 setTimeout(() => { resetScanPanel(); }, 1500); 
              }
           }).catch(err => { alert("통신 오류"); resetScanPanel(); });
       }
