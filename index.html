@@ -21,7 +21,6 @@
     .btn-cancel { background-color: #6c757d; color: white; }
     .btn-home { background-color: #f8f9fa; color: #333; border: 1px solid #ddd; margin-top: 20px; }
     .btn-list { background-color: #17a2b8; color: white; margin-top: 15px; } 
-    .btn-app { background-color: #000; color: #00ff00; font-size: 18px; border: 2px solid #00ff00; margin-bottom: 20px;}
     
     input, select { width: 100%; padding: 15px; margin: 10px 0; font-size: 18px; border: 2px solid #ddd; border-radius: 8px; text-align: center; box-sizing: border-box; }
     
@@ -93,26 +92,28 @@
   </div>
 
   <div id="screen-scanner" class="hidden">
-    <h3 id="mode-title">스캐너 작동 준비</h3>
+    <h3 id="mode-title">스캐너 대기 중</h3>
     <div id="status-bar"></div>
     
-    <div style="margin: 30px 0; font-size:15px; color:#555;">
-      <p>💡 <b>스캔 방법:</b><br>바탕화면에 깔아둔 <b>[QR 바코드 스캐너]</b> 앱을 열고<br>테슬라 QR을 찍으면 이곳으로 자동 연동됩니다.</p>
+    <div style="margin: 20px 0; font-size:15px; background: #e8f4fd; padding: 15px; border-radius: 8px;">
+      <p style="margin:0;">💡 <b>스캔 방법:</b><br>바탕화면의 <b>[스캔 앱]</b>으로 QR을 찍으시면<br>이 화면으로 바로 연동됩니다.</p>
     </div>
 
-    <!-- 결과 처리 패널 -->
+    <!-- 결과 확인 및 저장 패널 -->
     <div id="control-panel" class="hidden">
       <p style="margin-top:0;">인식된 차대번호:<br><strong id="vin-display"></strong></p>
       <div id="result-message"></div>
+      
       <div id="action-group" class="hidden">
         <input type="text" id="location-input" class="hidden" placeholder="위치 입력 (예: A-1)" autocomplete="off" />
         <button id="main-action-btn" class="btn-save" onclick="processAction()">저장 하기</button>
       </div>
-      <button class="btn-cancel" onclick="resetScanPanel()">스캔 대기 상태로</button>
+      
+      <button class="btn-cancel" onclick="resetScanPanel()">다음 차량 스캔 대기</button>
     </div>
     
     <button id="btn-show-list" class="btn-list hidden" onclick="showMyList()">📋 내가 상차한 차량 보기</button>
-    <button class="btn-home" onclick="clearStateAndHome()">🔙 로그아웃 (처음으로)</button>
+    <button class="btn-home" onclick="clearStateAndHome()" style="margin-top: 30px;">🔙 로그아웃 (처음으로)</button>
   </div>
 
   <div id="screen-my-list" class="hidden">
@@ -135,29 +136,23 @@
     window.onload = function() {
       updatePortDropdowns(); 
       
-      // ★ 신규: 스캔 앱이 넘겨준 URL 파라미터(?scanned=차대번호) 감지
       const urlParams = new URLSearchParams(window.location.search);
       const scannedText = urlParams.get('scanned');
-
-      // 로컬 스토리지에서 기존 로그인 상태 복구 시도
       const savedUser = localStorage.getItem('kain_currentUser');
       
       fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { 
         appData = data;
         
         if (savedUser) {
-           // 기존 작업 중이던 기사님이면 스캐너 화면으로 바로 직행
            restoreState();
            updateStatusBarAfterFetch();
            showScreen("screen-scanner");
            
            if (scannedText) {
-             // 주소창 파라미터 청소 (새로고침 시 중복 저장 방지)
              window.history.replaceState({}, document.title, window.location.pathname);
-             onScanSuccess(scannedText); // 앱이 넘겨준 데이터 즉시 판독
+             onScanSuccess(scannedText); // 앱이 넘겨준 데이터 즉시 판독 실행
            }
         } else {
-           // 처음 접속한 기사님이거나 로그아웃 상태
            showScreen("screen-home"); 
         }
       }).catch(err => { 
@@ -167,7 +162,6 @@
 
     function showScreen(screenId) { document.querySelectorAll("body > div").forEach(div => div.classList.add("hidden")); document.getElementById(screenId).classList.remove("hidden"); }
 
-    // ★ 상태 보존 함수 (기사님이 앱을 켜도 정보가 안 날아가게 메모리에 저장)
     function saveState() {
       localStorage.setItem('kain_currentUser', currentUser);
       localStorage.setItem('kain_currentMode', currentMode);
@@ -191,15 +185,6 @@
         document.getElementById("mode-title").innerText = "🔵 광명 상차 진행 모드";
       } else if (currentMode === 'PORT') {
         const type = localStorage.getItem('kain_portWorkType') || 'port';
-        const dep = localStorage.getItem('kain_portDep') || '';
-        const dest = localStorage.getItem('kain_portDest') || '';
-        
-        const radios = document.getElementsByName('portWorkType');
-        for(let i=0; i<radios.length; i++){ if(radios[i].value === type) radios[i].checked = true; }
-        updatePortDropdowns();
-        document.getElementById("port-departure").value = dep;
-        document.getElementById("port-destination").value = dest;
-        
         const typeName = type === 'port' ? '항작업' : '창고작업';
         document.getElementById("mode-title").innerText = `🟠 ${typeName} 스캔 모드`;
       }
@@ -223,7 +208,7 @@
       if (!pin) return alert("PIN 번호를 입력해주세요.");
       if (appData.users && appData.users[pin]) {
         currentUser = appData.users[pin]; currentMode = "YARD"; myScannedVins = []; 
-        saveState(); // 입장 시 정보 저장
+        saveState();
         startScanner("🟢 야드 위치 등록 모드", `작업자: ${currentUser}`);
         document.getElementById("btn-show-list").classList.add("hidden"); 
       } else { alert("일치하는 PIN 번호가 없습니다."); }
@@ -283,8 +268,9 @@
       isProcessing = false;
     }
 
+    // ★ 스캔 성공 시 데이터 분석 및 처리 판독
     function onScanSuccess(decodedText) {
-      if (isProcessing || !appData) return; isProcessing = true; 
+      if (!appData) return; 
       
       const parts = decodedText.split('|');
       currentVin = parts[parts.length - 1].trim().toUpperCase();
@@ -313,7 +299,11 @@
       } else if (currentMode === "GM") {
         if (!appData.gmTargets[currentVin]) { msg.className = "msg-error"; msg.innerText = "❌ 광명딜리버리센터 운송 차량이 아닙니다."; }
         else if (appData.gmLogs[currentVin]) { msg.className = "msg-warn"; msg.innerText = "⚠️ 이미 상차 완료된 차량입니다."; }
-        else { msg.className = "msg-success"; msg.innerText = "✅ 상차 가능 차량"; group.classList.remove("hidden"); actionBtn.innerText = "상차 완료"; }
+        else { 
+           // 항/창고와 마찬가지로 광명도 앱 스캔 즉시 바로 서버로 쏠 수 있게 처리
+           msg.className = "msg-success"; msg.innerText = "✅ 상차 가능 차량 (자동 처리 중...)"; 
+           processAction(); // 자동 저장 실행
+        }
       } else if (currentMode === "PORT") {
         const type = document.querySelector('input[name="portWorkType"]:checked').value;
         const isAlreadyScanned = (type === 'port') ? (appData.portLogs && appData.portLogs[currentVin]) : (appData.whLogs && appData.whLogs[currentVin]);
@@ -321,36 +311,38 @@
         if (isAlreadyScanned) { 
            msg.className = "msg-warn"; msg.innerText = "⚠️ 이미 등록된 차량입니다."; 
         } else {
-           msg.className = "msg-success"; msg.innerText = "✅ 정상 차량 확인"; 
-           group.classList.remove("hidden"); actionBtn.innerText = "저장 하기";
+           // ★ 핵심 수정: 항/창고 작업은 앱으로 찍으면 버튼 누를 필요 없이 즉시 서버로 저장되게 자동화
+           msg.className = "msg-success"; msg.innerText = "✅ 정상 차량 (자동 저장 중...)"; 
+           processAction(); // 자동 저장 실행
         }
       }
     }
 
+    // ★ 서버로 데이터 전송 및 시트 기록 함수
     function processAction() {
-      const msg = document.getElementById("result-message"); const group = document.getElementById("action-group");
-      group.classList.add("hidden"); msg.className = "msg-warn"; msg.innerText = "저장 중... ⏳";
-      const safeVin = encodeURIComponent(currentVin); const safeUser = encodeURIComponent(currentUser);
+      const msg = document.getElementById("result-message"); 
+      const safeVin = encodeURIComponent(currentVin); 
+      const safeUser = encodeURIComponent(currentUser);
 
       if (currentMode === "YARD") {
         const loc = document.getElementById("location-input").value; if(!loc) { alert("위치를 입력하세요"); resetScanPanel(); return; }
         fetch(`${API_URL}?action=saveYard&vin=${safeVin}&loc=${encodeURIComponent(loc)}&worker=${safeUser}`).then(res => res.json())
-          .then(res => { if(res.status === "SUCCESS") { appData.logs[currentVin] = true; resetScanPanel(); } }).catch(err => { alert("통신 오류"); resetScanPanel(); });
+          .then(res => { if(res.status === "SUCCESS") { appData.logs[currentVin] = true; alert("위치가 저장되었습니다."); resetScanPanel(); } }).catch(err => { alert("통신 오류"); resetScanPanel(); });
       } else if (currentMode === "GM") {
         fetch(`${API_URL}?action=saveGwangmyeong&vin=${safeVin}&driver=${safeUser}`).then(res => res.json())
           .then(res => {
              if(res.status === "SUCCESS") { 
                  appData.gmLogs[currentVin] = true; appData.gmLoadedCount++; myScannedVins.push(currentVin); 
-                 saveState(); // 카운트 올렸으니 메모리도 업데이트
+                 saveState(); 
                  document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`;
-                 alert("상차 처리되었습니다.\n(누적: " + myScannedVins.length + "대)"); resetScanPanel(); 
+                 resetScanPanel(); 
              }
           }).catch(err => { alert("통신 오류"); resetScanPanel(); });
       } else if (currentMode === "PORT") {
-        const type = document.querySelector('input[name="portWorkType"]:checked').value;
+        const type = localStorage.getItem('kain_portWorkType') || document.querySelector('input[name="portWorkType"]:checked').value;
         const actionType = type === 'port' ? 'savePort' : 'saveWarehouse';
-        const dep = encodeURIComponent(document.getElementById("port-departure").value);
-        const dest = encodeURIComponent(document.getElementById("port-destination").value);
+        const dep = encodeURIComponent(localStorage.getItem('kain_portDep') || document.getElementById("port-departure").value);
+        const dest = encodeURIComponent(localStorage.getItem('kain_portDest') || document.getElementById("port-destination").value);
 
         fetch(`${API_URL}?action=${actionType}&vin=${safeVin}&departure=${dep}&destination=${dest}&driver=${safeUser}`)
           .then(res => res.json())
@@ -362,8 +354,12 @@
                  myScannedVins.push(currentVin);
                  saveState(); 
                  document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 누적: ${myScannedVins.length}대`;
-                 alert("정상적으로 저장되었습니다.\n(누적: " + myScannedVins.length + "대)"); 
-                 resetScanPanel(); 
+                 
+                 // 성공 피드백 알림
+                 msg.className = "msg-success";
+                 msg.innerText = `✅ [저장완료] ${currentVin} (누적: ${myScannedVins.length}대)`;
+                 
+                 setTimeout(() => { resetScanPanel(); }, 1500); // 1.5초 후 다음 스캔 대기
              }
           }).catch(err => { alert("통신 오류"); resetScanPanel(); });
       }
