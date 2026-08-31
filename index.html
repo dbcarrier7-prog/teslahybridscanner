@@ -87,7 +87,7 @@
     <select id="port-departure"></select>
     <select id="port-destination"></select>
 
-    <button class="btn-port" onclick="startPortMode()">확인 및 스캔 대기 시작</button>
+    <button class="btn-port" onclick="startPortMode()">설정 완료 및 스캔 대기</button>
     <button class="btn-home" onclick="showScreen('screen-home')">🔙 처음으로</button>
   </div>
 
@@ -96,7 +96,7 @@
     <div id="status-bar"></div>
     
     <div style="margin: 20px 0; font-size:15px; background: #e8f4fd; padding: 15px; border-radius: 8px; border: 1px solid #bce8f1;">
-      <p style="margin:0;">💡 <b>현장 사용법:</b><br>폰 자체 <b>[QR 코드 스캔]</b>으로 라벨을 찍은 후<br>뜨는 링크를 누르면 <b>즉시 자동 저장</b>됩니다!</p>
+      <p style="margin:0;">💡 <b>현장 사용법:</b><br>폰 자체 <b>[QR 코드 스캔]</b>으로 라벨을 찍은 후<br>뜨는 링크를 누르면 <b>설정된 정보로 즉시 자동 저장</b>됩니다!</p>
     </div>
 
     <div id="control-panel" class="hidden">
@@ -149,7 +149,7 @@
            
            if (scannedText) {
              window.history.replaceState({}, document.title, window.location.pathname);
-             onScanSuccess(scannedText); // 외부 스캔 데이터 즉시 자동 처리
+             onScanSuccess(scannedText); // 스캔 데이터 자동 처리
            }
         } else {
            showScreen("screen-home"); 
@@ -197,7 +197,10 @@
         document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`;
         document.getElementById("btn-show-list").classList.remove("hidden");
       } else if (currentMode === 'PORT') {
-        document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 누적: ${myScannedVins.length}대`;
+        const type = localStorage.getItem('kain_portWorkType') || 'port';
+        const dep = localStorage.getItem('kain_portDep') || '';
+        const dest = localStorage.getItem('kain_portDest') || '';
+        document.getElementById("status-bar").innerText = `기사명: ${currentUser} | [${dep} ➔ ${dest}] | 누적: ${myScannedVins.length}대`;
         document.getElementById("btn-show-list").classList.remove("hidden");
       }
     }
@@ -241,7 +244,7 @@
       
       currentUser = driver; currentMode = "PORT"; myScannedVins = []; 
       saveState();
-      startScanner(`🟠 ${typeName} 스캔 모드`, `기사명: ${currentUser} | 누적: 0대`);
+      startScanner(`🟠 ${typeName} 스캔 모드`, `기사명: ${currentUser} | [${dep} ➔ ${dest}] | 누적: 0대`);
       document.getElementById("btn-show-list").classList.remove("hidden");
     }
 
@@ -267,7 +270,6 @@
       isProcessing = false;
     }
 
-    // 복잡한 텍스트에서 17자리 차대번호만 정밀 발라내는 필터링 파서
     function extractVin(rawText) {
       if (!rawText) return "";
       let cleanText = rawText.trim();
@@ -320,7 +322,7 @@
         if (isAlreadyScanned) { 
            msg.className = "msg-warn"; msg.innerText = "⚠️ 이미 등록된 차량입니다."; 
         } else {
-           msg.className = "msg-success"; msg.innerText = "🚀 자동 저장 중... ⏳"; 
+           msg.className = "msg-success"; msg.innerText = "🚀 설정된 정보로 자동 저장 중... ⏳"; 
            processAction(); 
         }
       }
@@ -348,10 +350,10 @@
              }
           }).catch(err => { alert("통신 오류"); resetScanPanel(); });
       } else if (currentMode === "PORT") {
-        const type = localStorage.getItem('kain_portWorkType') || document.querySelector('input[name="portWorkType"]:checked').value;
+        const type = localStorage.getItem('kain_portWorkType') || 'port';
         const actionType = type === 'port' ? 'savePort' : 'saveWarehouse';
-        const dep = encodeURIComponent(localStorage.getItem('kain_portDep') || document.getElementById("port-departure").value);
-        const dest = encodeURIComponent(localStorage.getItem('kain_portDest') || document.getElementById("port-destination").value);
+        const dep = encodeURIComponent(localStorage.getItem('kain_portDep') || '');
+        const dest = encodeURIComponent(localStorage.getItem('kain_portDest') || '');
 
         fetch(`${API_URL}?action=${actionType}&vin=${safeVin}&departure=${dep}&destination=${dest}&driver=${safeUser}`)
           .then(res => res.json())
@@ -362,7 +364,10 @@
                  
                  myScannedVins.push(currentVin);
                  saveState(); 
-                 document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 누적: ${myScannedVins.length}대`;
+                 
+                 const depStr = decodeURIComponent(dep);
+                 const destStr = decodeURIComponent(dest);
+                 document.getElementById("status-bar").innerText = `기사명: ${currentUser} | [${depStr} ➔ ${destStr}] | 누적: ${myScannedVins.length}대`;
                  
                  msg.className = "msg-success";
                  msg.innerText = `✅ [저장완료] ${currentVin} (누적: ${myScannedVins.length}대)`;
