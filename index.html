@@ -164,6 +164,11 @@
     if ("BarcodeDetector" in window) {
       try { nativeDetector = new BarcodeDetector({ formats: ["qr_code"] }); } catch (e) { nativeDetector = null; }
     }
+    let textDetector = null;
+    if ("TextDetector" in window) {
+      try { textDetector = new TextDetector(); } catch (e) { textDetector = null; }
+    }
+    let lastOcrAttemptTime = 0;
     let availableCams = []; let currentCamIndex = -1;
     
     const PORT_LOCATIONS = {
@@ -174,7 +179,9 @@
     window.onload = function() {
       updatePortDropdowns(); 
       document.getElementById("engine-status").innerText =
-        (nativeDetector ? "네이티브 디코더 사용 가능 · " : "") + (window.ImageCapture ? "고해상도 정지사진 폴백 사용 가능" : "");
+        (nativeDetector ? "QR 네이티브 디코더 ✅ · " : "QR 네이티브 디코더 ❌ · ") +
+        (textDetector ? "문자인식(OCR) ✅ · " : "문자인식(OCR) ❌ · ") +
+        (window.ImageCapture ? "고해상도 정지사진 폴백 ✅" : "고해상도 정지사진 폴백 ❌");
       fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { appData = data; showScreen("screen-home"); })
         .catch(err => { document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; });
     };
@@ -414,7 +421,12 @@
         onScanSuccess(decoded);
       } else {
         failStreak++;
-        // 연속 실패가 약 1초 이상 누적되면, 센서 최대 해상도 정지사진으로 한 번 더 시도 (안드로이드 크롬 등 지원 기기만 작동)
+        // QR이 계속 안 잡히면, 화면 전체에서 인쇄된 차대번호 "글자"를 직접 읽어보는 시도(OCR)를 추가로 함
+        // (QR은 작아서 안 잡혀도, 옆의 큰 글자는 지금 초점 상태로도 읽힐 수 있음)
+        if (textDetector && failStreak > 5 && now - lastOcrAttemptTime > 500) {
+          lastOcrAttemptTime = now;
+          tryFullFrameOcr(video);
+        }
         if (imageCaptureRef && failStreak > 11 && now - lastStillAttemptTime > 1200) {
           lastStillAttemptTime = now;
           tryHighResStillDecode();
@@ -483,6 +495,35 @@
       } catch (e) {
         console.log("고해상도 정지사진 캡처 미지원/실패 (일부 기기·브라우저는 정상적으로 건너뜀):", e);
       }
+    }
+
+    // 화면 전체에서 인쇄된 차대번호(17자리) 문자를 직접 읽어보는 시도 (QR 우회 경로)
+    const VIN_REGEX = /[A-HJ-NPR-Z0-9]{17}/; // VIN 규격상 I, O, Q는 쓰이지 않음
+
+    async function tryOcrVin(canvas) {
+      if (!textDetector) return null;
+      try {
+        const results = await textDetector.detect(canvas);
+        for (const r of results) {
+          const cleaned = (r.rawValue || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+          const match = cleaned.match(VIN_REGEX);
+          if (match) return match[0];
+        }
+      } catch (e) { /* 무시 */ }
+      return null;
+    }
+
+    async function tryFullFrameOcr(video) {
+      try {
+        const canvas = document.createElement("canvas");
+        const scale = Math.min(1, 1280 / video.videoWidth);
+        canvas.width = Math.floor(video.videoWidth * scale);
+        canvas.height = Math.floor(video.videoHeight * scale);
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const vin = await tryOcrVin(canvas);
+        if (vin) { failStreak = 0; onScanSuccess(vin); }
+      } catch (e) { console.log("OCR 시도 실패:", e); }
     }
 
     function setupZoomControl() {
