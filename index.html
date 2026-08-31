@@ -188,26 +188,15 @@
       
       if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
 
-      if (currentMode === "PORT") {
-        // 항/창고 전용: 고해상도, 연속 포커스, 2배 줌, 스캔 영역 축소(150px)
-        const portConfig = { fps: 20, qrbox: { width: 150, height: 150 }, aspectRatio: 1.777778 };
-        const portCameraConfig = { 
-          facingMode: "environment",
-          width: { min: 1280, ideal: 1920, max: 2560 },
-          height: { min: 720, ideal: 1080, max: 1440 },
-          advanced: [{ focusMode: "continuous" }, { zoom: 2.0 }]
-        };
-        html5QrCode.start(portCameraConfig, portConfig, onScanSuccess)
-          .catch(err => {
-             console.warn("기기가 고급 카메라 설정을 지원하지 않아 기본 설정으로 재시도합니다.", err);
-             html5QrCode.start({ facingMode: "environment" }, portConfig, onScanSuccess)
-               .catch(e => alert("카메라 권한을 확인해주세요."));
-          });
-      } else {
-        // 기존 야드/광명 전용: 기본 세팅 유지 (250px)
-        html5QrCode.start({ facingMode: "environment" }, { fps: 15, qrbox: { width: 250, height: 250 } }, onScanSuccess)
-          .catch(err => alert("카메라 권한을 확인해주세요."));
-      }
+      // 검은 화면 버그를 막기 위해 가장 안정적인 기본 옵션으로 원복합니다.
+      // 대신 항/창고 모드일 때는 화면 중앙의 스캔 네모 박스(qrbox) 크기만 150으로 줄여서 작은 QR에 집중하게 만듭니다.
+      const boxSize = (currentMode === "PORT") ? 150 : 250;
+      
+      html5QrCode.start(
+        { facingMode: "environment" }, 
+        { fps: 15, qrbox: { width: boxSize, height: boxSize } }, 
+        onScanSuccess
+      ).catch(err => alert("카메라 권한을 확인해주세요."));
     }
 
     function stopScannerAndHome() {
