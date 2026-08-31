@@ -21,6 +21,7 @@
     .btn-cancel { background-color: #6c757d; color: white; }
     .btn-home { background-color: #f8f9fa; color: #333; border: 1px solid #ddd; margin-top: 20px; }
     .btn-list { background-color: #17a2b8; color: white; margin-top: 15px; } 
+    .btn-photo { background-color: #6f42c1; color: white; margin-top: 10px; }
     
     input, select { width: 100%; padding: 15px; margin: 10px 0; font-size: 18px; border: 2px solid #ddd; border-radius: 8px; text-align: center; box-sizing: border-box; }
     
@@ -111,6 +112,11 @@
         <button class="btn-cancel" onclick="resumeScanning()">다시 스캔 (취소)</button>
       </div>
     </div>
+    
+    <!-- ★ 신규: 사진 촬영 스캔 버튼 추가 -->
+    <input type="file" id="qr-input-file" accept="image/*" capture="environment" class="hidden">
+    <button class="btn-photo" onclick="document.getElementById('qr-input-file').click()">📸 선명하게 사진 찍어서 스캔하기</button>
+    
     <button id="btn-show-list" class="btn-list hidden" onclick="showMyList()">📋 내가 상차한 차량 보기</button>
     <button class="btn-home" onclick="stopScannerAndHome()">🔙 모드 다시 선택하기</button>
   </div>
@@ -136,6 +142,9 @@
       updatePortDropdowns(); 
       fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { appData = data; showScreen("screen-home"); })
         .catch(err => { document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; });
+        
+      // ★ 신규: 파일 입력(사진 촬영) 이벤트 리스너 연결
+      document.getElementById('qr-input-file').addEventListener('change', handleImageUpload);
     };
 
     function showScreen(screenId) { document.querySelectorAll("body > div").forEach(div => div.classList.add("hidden")); document.getElementById(screenId).classList.remove("hidden"); }
@@ -188,24 +197,53 @@
       
       if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
 
-      // 검은 화면 버그를 막기 위해 가장 안정적인 기본 옵션으로 원복합니다.
-      // 대신 항/창고 모드일 때는 화면 중앙의 스캔 네모 박스(qrbox) 크기만 150으로 줄여서 작은 QR에 집중하게 만듭니다.
       const boxSize = (currentMode === "PORT") ? 150 : 250;
       
       html5QrCode.start(
         { facingMode: "environment" }, 
         { fps: 15, qrbox: { width: boxSize, height: boxSize } }, 
         onScanSuccess
-      ).catch(err => alert("카메라 권한을 확인해주세요."));
+      ).catch(err => console.log("카메라 초기화 스킵 (수동 사진 촬영 가능)"));
     }
 
     function stopScannerAndHome() {
       if (html5QrCode && html5QrCode.isScanning) { html5QrCode.stop().then(() => showScreen("screen-home")); } else { showScreen("screen-home"); }
       document.getElementById("pin-input").value = ""; document.getElementById("driver-input").value = ""; document.getElementById("port-driver-input").value = "";
     }
+    
+    // ★ 신규: 사진 스캔 처리 함수
+    function handleImageUpload(e) {
+      if (e.target.files.length === 0) return;
+      const imageFile = e.target.files[0];
+      
+      const msg = document.getElementById("result-message");
+      const cp = document.getElementById("control-panel");
+      document.getElementById("reader").classList.add("camera-dimmed");
+      cp.style.display = "block";
+      document.getElementById("action-group").classList.add("hidden");
+      msg.className = "msg-blue";
+      msg.innerText = "사진 분석 중... ⏳";
+
+      if(!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+      if (html5QrCode.isScanning) html5QrCode.pause();
+
+      html5QrCode.scanFile(imageFile, true)
+        .then(decodedText => {
+          cp.style.display = "none";
+          onScanSuccess(decodedText);
+          e.target.value = ""; // 초기화
+        })
+        .catch(err => {
+          msg.className = "msg-error";
+          msg.innerText = "❌ 사진에서 QR을 찾지 못했습니다. 흔들림 없이 다시 찍어주세요.";
+          e.target.value = "";
+          setTimeout(() => { resumeScanning(); }, 3000);
+        });
+    }
 
     function onScanSuccess(decodedText) {
       if (isProcessing || !appData) return; isProcessing = true; 
+      if (html5QrCode && html5QrCode.isScanning) html5QrCode.pause();
       
       const parts = decodedText.split('|');
       currentVin = parts[parts.length - 1].trim().toUpperCase();
@@ -284,7 +322,7 @@
 
     function resumeScanning() {
       document.getElementById("control-panel").style.display = "none"; document.getElementById("location-input").value = ""; document.getElementById("result-message").innerText = ""; document.getElementById("reader").classList.remove("camera-dimmed");
-      setTimeout(() => { isProcessing = false; }, 500);
+      setTimeout(() => { isProcessing = false; if (html5QrCode && html5QrCode.isPaused) { html5QrCode.resume(); } }, 500);
     }
 
     function showMyList() {
@@ -307,7 +345,7 @@
 
     function hideMyList() {
       document.getElementById("screen-my-list").classList.add("hidden"); document.getElementById("screen-scanner").classList.remove("hidden");
-      if (html5QrCode) html5QrCode.resume();
+      if (html5QrCode && html5QrCode.isPaused) html5QrCode.resume();
     }
 
     function deleteVin(vin) {
