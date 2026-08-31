@@ -133,6 +133,7 @@
     <button class="btn-manual" onclick="manualVinEntry()">⌨️ 차대번호 직접 입력 (QR 완전 손상 시)</button>
     <button class="btn-debug" onclick="switchCamera()">🔁 다른 카메라 렌즈로 전환</button>
     <button class="btn-debug" onclick="toggleCameraDebug()">🔧 카메라 상세정보 보기 (문제 보고용)</button>
+    <button class="btn-debug" onclick="copyCameraDebug()">📋 위 정보 복사하기 (채팅에 붙여넣기용)</button>
     <button class="btn-home" onclick="stopScannerAndHome()">🔙 모드 다시 선택하기</button>
   </div>
 
@@ -324,14 +325,23 @@
     // 이 기기의 카메라가 브라우저에 실제로 어떤 제어권을 넘겨주는지 그대로 확인 (문제 보고 시 이 내용을 캡처해서 공유해주면 정확한 진단 가능)
     function toggleCameraDebug() {
       const el = document.getElementById("camera-debug");
-      if (el.classList.contains("hidden")) {
-        let caps = {};
-        try { caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {}; } catch (e) {}
-        el.innerText = "기기: " + navigator.userAgent + "\n\n선택된 카메라: " + (availableCams[currentCamIndex] ? availableCams[currentCamIndex].label : "기본") +
-          "\n\n카메라 능력치(getCapabilities):\n" + JSON.stringify(caps, null, 2);
-        el.classList.remove("hidden");
+      let caps = {};
+      try { caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {}; } catch (e) {}
+      el.innerText = "기기: " + navigator.userAgent + "\n\n선택된 카메라: " + (availableCams[currentCamIndex] ? availableCams[currentCamIndex].label : "기본") +
+        "\n\n카메라 능력치(getCapabilities):\n" + JSON.stringify(caps, null, 2);
+      el.classList.toggle("hidden");
+    }
+
+    function copyCameraDebug() {
+      const el = document.getElementById("camera-debug");
+      if (el.classList.contains("hidden") || !el.innerText) { toggleCameraDebug(); }
+      const text = document.getElementById("camera-debug").innerText;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text)
+          .then(() => alert("복사되었습니다. 채팅창에 붙여넣어 주세요."))
+          .catch(() => alert("복사 실패 - 화면을 스크롤하며 캡처해서 보내주세요."));
       } else {
-        el.classList.add("hidden");
+        alert("이 브라우저는 자동 복사가 지원 안 됩니다 - 화면을 스크롤하며 캡처해서 보내주세요.");
       }
     }
 
