@@ -21,8 +21,7 @@
     .btn-cancel { background-color: #6c757d; color: white; }
     .btn-home { background-color: #f8f9fa; color: #333; border: 1px solid #ddd; margin-top: 20px; }
     .btn-list { background-color: #17a2b8; color: white; margin-top: 15px; } 
-    .btn-app { background-color: #000000; color: #00ff00; font-size: 20px; border: 2px solid #00ff00; }
-    .btn-photo { background-color: #6c757d; color: white; font-size: 15px; padding: 12px; }
+    .btn-app { background-color: #000; color: #00ff00; font-size: 18px; border: 2px solid #00ff00; margin-bottom: 20px;}
     
     input, select { width: 100%; padding: 15px; margin: 10px 0; font-size: 18px; border: 2px solid #ddd; border-radius: 8px; text-align: center; box-sizing: border-box; }
     
@@ -44,7 +43,6 @@
     #my-list-ul li strong { font-size: 18px; color: #0056b3; display: block; margin-top: 3px;}
     .btn-delete { width: auto; padding: 8px 15px; margin: 0; background-color: #dc3545; color: white; font-size: 14px; border-radius: 5px; }
   </style>
-  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 </head>
 <body>
 
@@ -95,19 +93,11 @@
   </div>
 
   <div id="screen-scanner" class="hidden">
-    <h3 id="mode-title">스캐너 작동 중</h3>
+    <h3 id="mode-title">스캐너 작동 준비</h3>
     <div id="status-bar"></div>
     
-    <!-- ★ 신규: 외부 스캔 앱 호출 전용 버튼 -->
-    <div style="margin: 30px 0;">
-      <p style="font-size: 14px; color: #666; margin-bottom: 5px;">※ 최초 1회 [바코드 스캐너] 앱 설치가 필요합니다.</p>
-      <button class="btn-app" onclick="launchScannerApp()">📱 스캔 앱으로 촬영하기</button>
-      
-      <div style="margin-top: 15px;">
-        <input type="file" id="qr-input-file" accept="image/*" capture="environment" class="hidden">
-        <button class="btn-photo" onclick="document.getElementById('qr-input-file').click()">📸 아이폰 전용 (사진 찍어 올리기)</button>
-      </div>
-      <div id="reader" style="display: none;"></div>
+    <div style="margin: 30px 0; font-size:15px; color:#555;">
+      <p>💡 <b>스캔 방법:</b><br>바탕화면에 깔아둔 <b>[QR 바코드 스캐너]</b> 앱을 열고<br>테슬라 QR을 찍으면 이곳으로 자동 연동됩니다.</p>
     </div>
 
     <!-- 결과 처리 패널 -->
@@ -118,17 +108,17 @@
         <input type="text" id="location-input" class="hidden" placeholder="위치 입력 (예: A-1)" autocomplete="off" />
         <button id="main-action-btn" class="btn-save" onclick="processAction()">저장 하기</button>
       </div>
-      <button class="btn-cancel" onclick="resetScanPanel()">닫기</button>
+      <button class="btn-cancel" onclick="resetScanPanel()">스캔 대기 상태로</button>
     </div>
     
     <button id="btn-show-list" class="btn-list hidden" onclick="showMyList()">📋 내가 상차한 차량 보기</button>
-    <button class="btn-home" onclick="stopScannerAndHome()">🔙 모드 다시 선택하기</button>
+    <button class="btn-home" onclick="clearStateAndHome()">🔙 로그아웃 (처음으로)</button>
   </div>
 
   <div id="screen-my-list" class="hidden">
     <h3>📋 내 상차 목록 (<span id="my-list-count">0</span>대)</h3>
     <ul id="my-list-ul"></ul>
-    <button class="btn-gm" onclick="hideMyList()">🔙 스캐너로 돌아가기</button>
+    <button class="btn-gm" onclick="hideMyList()">🔙 스캐너 대기 화면으로</button>
   </div>
 
   <script>
@@ -136,7 +126,6 @@
     
     let appData = null; let currentMode = ""; let currentUser = ""; let currentVin = ""; let isProcessing = false;
     let myScannedVins = []; 
-    let html5QrCode = null; // 사진 업로드 분석용으로만 사용
     
     const PORT_LOCATIONS = {
       port: { dep: ["PIRT", "HPIT"], dest: ["PH선광", "배후부지", "AMF(서울우유)", "PCTC(한진)"] },
@@ -145,41 +134,40 @@
 
     window.onload = function() {
       updatePortDropdowns(); 
-      document.getElementById('qr-input-file').addEventListener('change', handleImageUpload);
       
-      // ★ 신규: 외부 앱 스캔 후 되돌아왔을 때 URL 파라미터 감지 및 처리
+      // ★ 신규: 스캔 앱이 넘겨준 URL 파라미터(?scanned=차대번호) 감지
       const urlParams = new URLSearchParams(window.location.search);
       const scannedText = urlParams.get('scanned');
 
-      if (scannedText) {
-        // 앱을 거쳐왔으므로 로컬 스토리지에서 정보 복구
-        restoreState();
-        // 주소창에서 파라미터 제거 (새로고침 시 재실행 방지)
-        window.history.replaceState({}, document.title, window.location.pathname);
+      // 로컬 스토리지에서 기존 로그인 상태 복구 시도
+      const savedUser = localStorage.getItem('kain_currentUser');
+      
+      fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { 
+        appData = data;
         
-        document.getElementById("screen-loading").classList.remove("hidden");
-        fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { 
-          appData = data;
-          updateStatusBarAfterFetch();
-          showScreen("screen-scanner");
-          onScanSuccess(scannedText); // 복귀 직후 자동으로 분석 시작
-        }).catch(err => { 
-          document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; 
-        });
-      } else {
-        // 일반 접속
-        fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { 
-          appData = data; 
-          showScreen("screen-home"); 
-        }).catch(err => { 
-          document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; 
-        });
-      }
+        if (savedUser) {
+           // 기존 작업 중이던 기사님이면 스캐너 화면으로 바로 직행
+           restoreState();
+           updateStatusBarAfterFetch();
+           showScreen("screen-scanner");
+           
+           if (scannedText) {
+             // 주소창 파라미터 청소 (새로고침 시 중복 저장 방지)
+             window.history.replaceState({}, document.title, window.location.pathname);
+             onScanSuccess(scannedText); // 앱이 넘겨준 데이터 즉시 판독
+           }
+        } else {
+           // 처음 접속한 기사님이거나 로그아웃 상태
+           showScreen("screen-home"); 
+        }
+      }).catch(err => { 
+        document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; 
+      });
     };
 
     function showScreen(screenId) { document.querySelectorAll("body > div").forEach(div => div.classList.add("hidden")); document.getElementById(screenId).classList.remove("hidden"); }
 
-    // ★ 상태 보존 (Local Storage 저장)
+    // ★ 상태 보존 함수 (기사님이 앱을 켜도 정보가 안 날아가게 메모리에 저장)
     function saveState() {
       localStorage.setItem('kain_currentUser', currentUser);
       localStorage.setItem('kain_currentMode', currentMode);
@@ -191,7 +179,6 @@
       localStorage.setItem('kain_myScannedVins', JSON.stringify(myScannedVins));
     }
 
-    // ★ 상태 복구
     function restoreState() {
       currentUser = localStorage.getItem('kain_currentUser') || "";
       currentMode = localStorage.getItem('kain_currentMode') || "";
@@ -218,7 +205,6 @@
       }
     }
 
-    // 통신 완료 후 상단 상태바 최신화
     function updateStatusBarAfterFetch() {
       if (currentMode === 'YARD') {
         document.getElementById("status-bar").innerText = `작업자: ${currentUser}`;
@@ -237,6 +223,7 @@
       if (!pin) return alert("PIN 번호를 입력해주세요.");
       if (appData.users && appData.users[pin]) {
         currentUser = appData.users[pin]; currentMode = "YARD"; myScannedVins = []; 
+        saveState(); // 입장 시 정보 저장
         startScanner("🟢 야드 위치 등록 모드", `작업자: ${currentUser}`);
         document.getElementById("btn-show-list").classList.add("hidden"); 
       } else { alert("일치하는 PIN 번호가 없습니다."); }
@@ -246,6 +233,7 @@
       const driver = document.getElementById("driver-input").value.trim();
       if (!driver) return alert("성함이나 호차 번호를 입력해주세요.");
       currentUser = driver; currentMode = "GM"; myScannedVins = []; 
+      saveState();
       startScanner("🔵 광명 상차 진행 모드", `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`);
       document.getElementById("btn-show-list").classList.remove("hidden"); 
     }
@@ -268,6 +256,7 @@
       if (!dep || !dest) return alert("출발지와 도착지를 모두 선택해주세요.");
       
       currentUser = driver; currentMode = "PORT"; myScannedVins = []; 
+      saveState();
       startScanner(`🟠 ${typeName} 스캔 모드`, `기사명: ${currentUser} | 누적: 0대`);
       document.getElementById("btn-show-list").classList.remove("hidden");
     }
@@ -279,46 +268,12 @@
       resetScanPanel();
     }
 
-    function stopScannerAndHome() {
+    function clearStateAndHome() {
+      localStorage.removeItem('kain_currentUser');
+      localStorage.removeItem('kain_currentMode');
+      localStorage.removeItem('kain_myScannedVins');
       showScreen("screen-home"); 
       document.getElementById("pin-input").value = ""; document.getElementById("driver-input").value = ""; document.getElementById("port-driver-input").value = "";
-    }
-
-    // ★ 최종 수정: Binary Eye를 '웹사이트 자동 복귀 모드'로 정확하게 강제 실행
-    function launchScannerApp() {
-      saveState(); // 화면이 넘어가기 전에 기사님 작업 정보 임시 저장
-      const vURL = "https://teslahybridscanner.vercel.app/?scanned={CODE}";
-      const callbackUrl = encodeURIComponent(vURL);
-      const fallbackUrl = encodeURIComponent("https://play.google.com/store/apps/details?id=de.markusfisch.android.binaryeye");
-      
-      // ★ 안드로이드 표준 액션(SCAN)과 자동 복귀(S.ret) 명령어를 포함한 완벽한 호출 코드
-      const intentUrl = `intent://scan/#Intent;action=com.google.zxing.client.android.SCAN;package=de.markusfisch.android.binaryeye;S.ret=${callbackUrl};S.browser_fallback_url=${fallbackUrl};end`;
-      
-      window.location.href = intentUrl;
-    }
-
-    // 아이폰 등 외부 앱 연동 불가 시 대체 수동 스캔 (사진 앨범 처리)
-    function handleImageUpload(e) {
-      if (e.target.files.length === 0) return;
-      const imageFile = e.target.files[0];
-      
-      const msg = document.getElementById("result-message");
-      const cp = document.getElementById("control-panel");
-      cp.classList.remove("hidden");
-      document.getElementById("action-group").classList.add("hidden");
-      document.getElementById("vin-display").innerText = "로딩 중...";
-      msg.className = "msg-blue";
-      msg.innerText = "사진 분석 중... ⏳";
-
-      if(!html5QrCode) html5QrCode = new Html5Qrcode("reader");
-
-      html5QrCode.scanFile(imageFile, true)
-        .then(decodedText => { onScanSuccess(decodedText); e.target.value = ""; })
-        .catch(err => {
-          msg.className = "msg-error";
-          msg.innerText = "❌ 사진에서 QR을 찾지 못했습니다. 흔들림 없이 선명하게 다시 찍어주세요.";
-          e.target.value = "";
-        });
     }
 
     function resetScanPanel() {
@@ -331,7 +286,6 @@
     function onScanSuccess(decodedText) {
       if (isProcessing || !appData) return; isProcessing = true; 
       
-      // 파이프(|)로 분리 후 마지막 17자리 추출
       const parts = decodedText.split('|');
       currentVin = parts[parts.length - 1].trim().toUpperCase();
       
@@ -387,7 +341,7 @@
           .then(res => {
              if(res.status === "SUCCESS") { 
                  appData.gmLogs[currentVin] = true; appData.gmLoadedCount++; myScannedVins.push(currentVin); 
-                 saveState(); // 누적 대수 로컬 스토리지에 업데이트
+                 saveState(); // 카운트 올렸으니 메모리도 업데이트
                  document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`;
                  alert("상차 처리되었습니다.\n(누적: " + myScannedVins.length + "대)"); resetScanPanel(); 
              }
@@ -406,7 +360,7 @@
                  else { if(!appData.whLogs) appData.whLogs = {}; appData.whLogs[currentVin] = true; }
                  
                  myScannedVins.push(currentVin);
-                 saveState(); // 누적 대수 업데이트
+                 saveState(); 
                  document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 누적: ${myScannedVins.length}대`;
                  alert("정상적으로 저장되었습니다.\n(누적: " + myScannedVins.length + "대)"); 
                  resetScanPanel(); 
@@ -447,7 +401,7 @@
         .then(res => {
            if(res.status === "SUCCESS") {
                myScannedVins = myScannedVins.filter(v => v !== vin);
-               saveState(); // 삭제 후 로컬 스토리지 업데이트
+               saveState(); 
                delete appData.gmLogs[vin]; 
                appData.gmLoadedCount--;
                document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`;
