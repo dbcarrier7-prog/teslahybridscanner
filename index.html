@@ -3,15 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Dongbu Carrier Tesla Scanner</title>
-  
-  <!-- ★ PWA를 위한 웹 앱 메타 태그 및 설정 -->
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="application-name" content="Tesla Scanner">
-  <meta name="apple-mobile-web-app-title" content="Tesla Scanner">
-  <meta name="theme-color" content="#007bff">
-
+  <title>Tesla Hybrid Scanner V2</title>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 10px; text-align: center; background-color: #f0f2f5; margin: 0; overflow-x: hidden; }
     h2, h3 { margin: 10px 0; color: #333; }
@@ -29,26 +21,10 @@
     .btn-cancel { background-color: #6c757d; color: white; }
     .btn-home { background-color: #f8f9fa; color: #333; border: 1px solid #ddd; margin-top: 20px; }
     .btn-list { background-color: #17a2b8; color: white; margin-top: 15px; } 
-    .btn-pwa { background-color: #6f42c1; color: white; font-size: 17px; padding: 14px; margin-bottom: 15px; border: 2px dashed #fff; }
     
     input, select { width: 100%; padding: 15px; margin: 10px 0; font-size: 18px; border: 2px solid #ddd; border-radius: 8px; text-align: center; box-sizing: border-box; }
     
-    #scanner-wrapper { position: relative; width: 100%; border-radius: 10px; overflow: hidden; background: #000; min-height: 300px; margin-top: 15px; }
-    #reader { width: 100%; }
-    .camera-dimmed { opacity: 0.2; pointer-events: none; }
-    
-    #target-box {
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      width: 220px; height: 220px; border: 4px solid #ff3b30; border-radius: 12px;
-      box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.6); z-index: 5; pointer-events: none;
-    }
-    #target-box::after {
-      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #ff3b30; box-shadow: 0 0 10px #ff3b30; animation: scanline 2s linear infinite;
-    }
-    @keyframes scanline { 0% { top: 0; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
-    #qr-shaded-region { display: none !important; }
-
-    #control-panel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); box-sizing: border-box; z-index: 10; display: none; }
+    #control-panel { background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); box-sizing: border-box; margin-top: 20px; }
     #vin-display { font-size: 1.4em; color: #000; letter-spacing: 1px; font-weight: bold; }
     
     .msg-error { color: #dc3545; font-size: 1.2em; font-weight: bold; margin: 10px 0; }
@@ -56,7 +32,7 @@
     .msg-success { color: #28a745; font-size: 1.2em; font-weight: bold; margin: 10px 0; }
     .msg-blue { color: #0056b3; font-size: 1.2em; font-weight: bold; margin: 10px 0; background-color: #e3f2fd; padding: 10px; border-radius: 8px; }
     
-    #status-bar { margin-top: 10px; font-weight: bold; color: #555; }
+    #status-bar { margin-top: 10px; font-weight: bold; color: #555; font-size: 1.1em; }
     .company-logo { width: 150px; height: auto; margin-bottom: 10px; } 
     .tesla-red { color: #cc0000; font-weight: bold; } 
     
@@ -66,7 +42,6 @@
     #my-list-ul li strong { font-size: 18px; color: #0056b3; display: block; margin-top: 3px;}
     .btn-delete { width: auto; padding: 8px 15px; margin: 0; background-color: #dc3545; color: white; font-size: 14px; border-radius: 5px; }
   </style>
-  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 </head>
 <body>
 
@@ -76,12 +51,7 @@
 
   <div id="screen-home" class="hidden">
     <img src="https://i.postimg.cc/7LSzLXw1/2024-dongbu-logo.png" alt="회사 로고" class="company-logo">
-    <h2><span class="tesla-red">TESLA</span> QR 스캐너</h2>
-    
-    <!-- ★ 바탕화면 앱 설치 유도 버튼 (최초 1회용) -->
-    <button class="btn-pwa" id="btn-install" onclick="installPWA()">📥 [필수] 바탕화면에 앱으로 설치하기</button>
-    
-    <p>작업하실 모드를 선택해주세요.</p>
+    <h2><span class="tesla-red">TESLA</span> QR 스캐너</h2><p>작업하실 모드를 선택해주세요.</p>
     <button class="btn-yard" onclick="showScreen('screen-auth-yard')">🟢 야드 위치 등록 (직원용)</button>
     <button class="btn-gm" onclick="showScreen('screen-auth-gm')">🔵 광명 상차 진행 (기사용)</button>
     <button class="btn-port" onclick="showScreen('screen-auth-port')">🟠 항/창고 작업 (기사용)</button>
@@ -117,83 +87,127 @@
     <select id="port-departure"></select>
     <select id="port-destination"></select>
 
-    <button class="btn-port" onclick="startPortMode()">확인 및 스캔 시작</button>
+    <button class="btn-port" onclick="startPortMode()">확인 및 스캔 대기 시작</button>
     <button class="btn-home" onclick="showScreen('screen-home')">🔙 처음으로</button>
   </div>
 
   <div id="screen-scanner" class="hidden">
-    <h3 id="mode-title">스캐너 작동 중</h3>
+    <h3 id="mode-title">스캐너 대기 중</h3>
     <div id="status-bar"></div>
-    <div id="scanner-wrapper">
-      <div id="reader"></div>
-      <div id="target-box"></div>
+    
+    <div style="margin: 20px 0; font-size:15px; background: #e8f4fd; padding: 15px; border-radius: 8px; border: 1px solid #bce8f1;">
+      <p style="margin:0;">💡 <b>현장 사용법:</b><br>폰 자체 <b>[QR 코드 스캔]</b>으로 라벨을 찍은 후<br>뜨는 링크를 누르면 <b>즉시 자동 저장</b>됩니다!</p>
+    </div>
+
+    <div id="control-panel" class="hidden">
+      <p style="margin-top:0;">추출된 차대번호:<br><strong id="vin-display"></strong></p>
+      <div id="result-message"></div>
       
-      <div id="control-panel">
-        <p style="margin-top:0;">추출된 차대번호:<br><strong id="vin-display"></strong></p>
-        <div id="result-message"></div>
-        <div id="action-group" class="hidden">
-          <input type="text" id="location-input" class="hidden" placeholder="위치 입력 (예: A-1)" autocomplete="off" />
-          <button id="main-action-btn" class="btn-save" onclick="processAction()">저장 하기</button>
-        </div>
-        <button class="btn-cancel" onclick="resumeScanning()">다음 차량 계속 스캔</button>
+      <div id="action-group" class="hidden">
+        <input type="text" id="location-input" class="hidden" placeholder="위치 입력 (예: A-1)" autocomplete="off" />
+        <button id="main-action-btn" class="btn-save" onclick="processAction()">위치 저장 하기</button>
       </div>
+      
+      <button class="btn-cancel" onclick="resetScanPanel()">다음 차량 대기 중</button>
     </div>
     
     <button id="btn-show-list" class="btn-list hidden" onclick="showMyList()">📋 내가 상차한 차량 보기</button>
-    <button class="btn-home" onclick="stopScannerAndHome()">🔙 모드 다시 선택하기</button>
+    <button class="btn-home" onclick="clearStateAndHome()" style="margin-top: 30px;">🔙 로그아웃 (처음으로)</button>
   </div>
 
   <div id="screen-my-list" class="hidden">
     <h3>📋 내 상차 목록 (<span id="my-list-count">0</span>대)</h3>
     <ul id="my-list-ul"></ul>
-    <button class="btn-gm" onclick="hideMyList()">🔙 스캐너로 돌아가기</button>
+    <button class="btn-gm" onclick="hideMyList()">🔙 스캐너 대기 화면으로</button>
   </div>
 
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbzP9rkRFf30-UBwDZkYzLrcelBiZdX_x_9G3I0ae1PqgBo3FYxSiE8_yNQSqZPB8pNYgA/exec";
-
-    let appData = null; let currentMode = ""; let currentUser = ""; let currentVin = ""; let isProcessing = false; let html5QrCode = null;
+    
+    let appData = null; let currentMode = ""; let currentUser = ""; let currentVin = ""; let isProcessing = false;
     let myScannedVins = []; 
-    let deferredPrompt = null;
     
     const PORT_LOCATIONS = {
       port: { dep: ["PIRT", "HPIT"], dest: ["PH선광", "배후부지", "AMF(서울우유)", "PCTC(한진)"] },
       warehouse: { dep: ["배후부지", "AMF(서울우유)", "PCTC(한진)"], dest: ["PH선광", "배후부지", "AMF(서울우유)", "PCTC(한진)"] }
     };
 
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      document.getElementById('btn-install').style.display = 'block';
-    });
-
-    function installPWA() {
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then((choiceResult) => {
-          if (choiceResult.outcome === 'accepted') {
-            console.log('사용자가 PWA 설치를 수락함');
-          }
-          deferredPrompt = null;
-        });
-      } else {
-        alert("브라우저 메뉴(우측 상단 ⁝ 버튼)에서 [앱 설치] 또는 [홈 화면에 추가]를 눌러주세요!");
-      }
-    }
-
     window.onload = function() {
       updatePortDropdowns(); 
-      fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { appData = data; showScreen("screen-home"); })
-        .catch(err => { document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; });
+      
+      const urlParams = new URLSearchParams(window.location.search);
+      const scannedText = urlParams.get('scanned');
+      const savedUser = localStorage.getItem('kain_currentUser');
+      
+      fetch(API_URL + "?action=getData").then(res => res.json()).then(data => { 
+        appData = data;
+        
+        if (savedUser) {
+           restoreState();
+           updateStatusBarAfterFetch();
+           showScreen("screen-scanner");
+           
+           if (scannedText) {
+             window.history.replaceState({}, document.title, window.location.pathname);
+             onScanSuccess(scannedText); // 외부 스캔 데이터 즉시 자동 처리
+           }
+        } else {
+           showScreen("screen-home"); 
+        }
+      }).catch(err => { 
+        document.getElementById("screen-loading").innerHTML = "<h3 class='msg-error'>❌ 데이터 연결 실패</h3>"; 
+      });
     };
 
     function showScreen(screenId) { document.querySelectorAll("body > div").forEach(div => div.classList.add("hidden")); document.getElementById(screenId).classList.remove("hidden"); }
+
+    function saveState() {
+      localStorage.setItem('kain_currentUser', currentUser);
+      localStorage.setItem('kain_currentMode', currentMode);
+      if (currentMode === 'PORT') {
+        localStorage.setItem('kain_portWorkType', document.querySelector('input[name="portWorkType"]:checked').value);
+        localStorage.setItem('kain_portDep', document.getElementById("port-departure").value);
+        localStorage.setItem('kain_portDest', document.getElementById("port-destination").value);
+      }
+      localStorage.setItem('kain_myScannedVins', JSON.stringify(myScannedVins));
+    }
+
+    function restoreState() {
+      currentUser = localStorage.getItem('kain_currentUser') || "";
+      currentMode = localStorage.getItem('kain_currentMode') || "";
+      const savedVins = localStorage.getItem('kain_myScannedVins');
+      myScannedVins = savedVins ? JSON.parse(savedVins) : [];
+      
+      if (currentMode === 'YARD') {
+        document.getElementById("mode-title").innerText = "🟢 야드 위치 등록 모드";
+      } else if (currentMode === 'GM') {
+        document.getElementById("mode-title").innerText = "🔵 광명 상차 진행 모드";
+      } else if (currentMode === 'PORT') {
+        const type = localStorage.getItem('kain_portWorkType') || 'port';
+        const typeName = type === 'port' ? '항작업' : '창고작업';
+        document.getElementById("mode-title").innerText = `🟠 ${typeName} 스캔 모드`;
+      }
+    }
+
+    function updateStatusBarAfterFetch() {
+      if (currentMode === 'YARD') {
+        document.getElementById("status-bar").innerText = `작업자: ${currentUser}`;
+        document.getElementById("btn-show-list").classList.add("hidden");
+      } else if (currentMode === 'GM') {
+        document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`;
+        document.getElementById("btn-show-list").classList.remove("hidden");
+      } else if (currentMode === 'PORT') {
+        document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 누적: ${myScannedVins.length}대`;
+        document.getElementById("btn-show-list").classList.remove("hidden");
+      }
+    }
 
     function verifyPin() {
       const pin = document.getElementById("pin-input").value.trim();
       if (!pin) return alert("PIN 번호를 입력해주세요.");
       if (appData.users && appData.users[pin]) {
         currentUser = appData.users[pin]; currentMode = "YARD"; myScannedVins = []; 
+        saveState();
         startScanner("🟢 야드 위치 등록 모드", `작업자: ${currentUser}`);
         document.getElementById("btn-show-list").classList.add("hidden"); 
       } else { alert("일치하는 PIN 번호가 없습니다."); }
@@ -203,6 +217,7 @@
       const driver = document.getElementById("driver-input").value.trim();
       if (!driver) return alert("성함이나 호차 번호를 입력해주세요.");
       currentUser = driver; currentMode = "GM"; myScannedVins = []; 
+      saveState();
       startScanner("🔵 광명 상차 진행 모드", `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`);
       document.getElementById("btn-show-list").classList.remove("hidden"); 
     }
@@ -211,7 +226,6 @@
       const type = document.querySelector('input[name="portWorkType"]:checked').value;
       const depSelect = document.getElementById("port-departure");
       const destSelect = document.getElementById("port-destination");
-      
       depSelect.innerHTML = '<option value="">출발지 선택</option>' + PORT_LOCATIONS[type].dep.map(v => `<option value="${v}">${v}</option>`).join('');
       destSelect.innerHTML = '<option value="">도착지 선택</option>' + PORT_LOCATIONS[type].dest.map(v => `<option value="${v}">${v}</option>`).join('');
     }
@@ -226,6 +240,7 @@
       if (!dep || !dest) return alert("출발지와 도착지를 모두 선택해주세요.");
       
       currentUser = driver; currentMode = "PORT"; myScannedVins = []; 
+      saveState();
       startScanner(`🟠 ${typeName} 스캔 모드`, `기사명: ${currentUser} | 누적: 0대`);
       document.getElementById("btn-show-list").classList.remove("hidden");
     }
@@ -234,29 +249,24 @@
       showScreen("screen-scanner"); 
       document.getElementById("mode-title").innerText = title; 
       document.getElementById("status-bar").innerText = statusText;
-      
-      if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
-
-      html5QrCode.start(
-        { facingMode: "environment" }, 
-        { fps: 20, qrbox: { width: 220, height: 220 } }, 
-        onScanSuccess
-      ).catch(err => {
-        alert("카메라 권한이 거부되었거나 사용 중입니다. 브라우저 설정에서 카메라 권한을 허용해 주세요.");
-      });
+      resetScanPanel();
     }
 
-    function stopScannerAndHome() {
-      if (html5QrCode && html5QrCode.isScanning) { 
-        html5QrCode.stop().then(() => {
-          showScreen("screen-home"); 
-        }).catch(err => showScreen("screen-home")); 
-      } else { 
-        showScreen("screen-home"); 
-      }
+    function clearStateAndHome() {
+      localStorage.removeItem('kain_currentUser');
+      localStorage.removeItem('kain_currentMode');
+      localStorage.removeItem('kain_myScannedVins');
+      showScreen("screen-home"); 
       document.getElementById("pin-input").value = ""; document.getElementById("driver-input").value = ""; document.getElementById("port-driver-input").value = "";
     }
-    
+
+    function resetScanPanel() {
+      document.getElementById("control-panel").classList.add("hidden");
+      document.getElementById("location-input").value = ""; 
+      document.getElementById("result-message").innerText = "";
+      isProcessing = false;
+    }
+
     // 복잡한 텍스트에서 17자리 차대번호만 정밀 발라내는 필터링 파서
     function extractVin(rawText) {
       if (!rawText) return "";
@@ -272,19 +282,11 @@
       return cleanText.toUpperCase();
     }
 
-    // 카메라 화면에 QR이 들어오는 순간 자동 실시간 인식
     function onScanSuccess(decodedText) {
-      if (isProcessing || !appData) return; 
-      isProcessing = true; 
-      
-      if (html5QrCode && html5QrCode.isScanning) {
-        html5QrCode.pause();
-      }
-      
       currentVin = extractVin(decodedText);
       
-      document.getElementById("reader").classList.add("camera-dimmed"); 
-      document.getElementById("control-panel").style.display = "block"; 
+      const cp = document.getElementById("control-panel");
+      cp.classList.remove("hidden");
       document.getElementById("vin-display").innerText = currentVin;
       
       const msg = document.getElementById("result-message"); 
@@ -292,100 +294,64 @@
       const locInput = document.getElementById("location-input"); 
       const actionBtn = document.getElementById("main-action-btn");
       
-      group.classList.add("hidden"); 
-      locInput.classList.add("hidden");
+      group.classList.add("hidden"); locInput.classList.add("hidden");
 
       if(currentVin.length !== 17) {
-         msg.className = "msg-error"; 
-         msg.innerText = "❌ 올바른 17자리 차대번호가 아닙니다.";
+         msg.className = "msg-error"; msg.innerText = "❌ 올바른 17자리 차대번호가 아닙니다.";
          return;
       }
 
-      // 모드별 즉시 자동 처리 및 대기 로직
       if (currentMode === "YARD") {
-        if (appData.logs[currentVin]) { 
-          msg.className = "msg-warn"; 
-          msg.innerText = "⚠️ 이미 위치 등록 완료된 차량입니다."; 
-        } else {
-          msg.className = "msg-success"; 
-          msg.innerText = "✅ 차량 확인됨. 위치를 입력하세요."; 
-          group.classList.remove("hidden"); 
-          locInput.classList.remove("hidden"); 
-          actionBtn.innerText = "위치 저장"; 
-          locInput.focus();
-        }
+        if (appData.logs[currentVin]) { msg.className = "msg-warn"; msg.innerText = "⚠️ 이미 위치 등록 완료됨"; }
+        else if (appData.gmTargets[currentVin]) { msg.className = "msg-blue"; msg.innerText = "🏢 [광명] 센터 배정 차량!"; group.classList.remove("hidden"); locInput.classList.remove("hidden"); actionBtn.innerText = "위치 저장"; locInput.focus(); }
+        else if (appData.targets[currentVin]) { msg.className = "msg-success"; msg.innerText = "✅ 확인 (고객 인도 대상)"; group.classList.remove("hidden"); locInput.classList.remove("hidden"); actionBtn.innerText = "위치 저장"; locInput.focus(); }
+        else { msg.className = "msg-error"; msg.innerText = "❌ 명단에 없는 차량"; }
       } else if (currentMode === "GM") {
-        if (!appData.gmTargets[currentVin]) { 
-          msg.className = "msg-error"; 
-          msg.innerText = "❌ 광명딜리버리센터 운송 차량이 아닙니다."; 
-        } else if (appData.gmLogs[currentVin]) { 
-          msg.className = "msg-warn"; 
-          msg.innerText = "⚠️ 이미 상차 완료된 차량입니다."; 
-        } else { 
-          msg.className = "msg-success"; 
-          msg.innerText = "🚀 상차 처리 중... ⏳"; 
-          processAction(); // 광명은 스캔 즉시 자동 저장
+        if (!appData.gmTargets[currentVin]) { msg.className = "msg-error"; msg.innerText = "❌ 광명딜리버리센터 운송 차량이 아닙니다."; }
+        else if (appData.gmLogs[currentVin]) { msg.className = "msg-warn"; msg.innerText = "⚠️ 이미 상차 완료된 차량입니다."; }
+        else { 
+           msg.className = "msg-success"; msg.innerText = "🚀 상차 자동 처리 중... ⏳"; 
+           processAction(); 
         }
       } else if (currentMode === "PORT") {
-        const type = document.querySelector('input[name="portWorkType"]:checked').value;
+        const type = localStorage.getItem('kain_portWorkType') || document.querySelector('input[name="portWorkType"]:checked').value;
         const isAlreadyScanned = (type === 'port') ? (appData.portLogs && appData.portLogs[currentVin]) : (appData.whLogs && appData.whLogs[currentVin]);
         
         if (isAlreadyScanned) { 
-           msg.className = "msg-warn"; 
-           msg.innerText = "⚠️ 이미 등록된 차량입니다."; 
+           msg.className = "msg-warn"; msg.innerText = "⚠️ 이미 등록된 차량입니다."; 
         } else {
-           msg.className = "msg-success"; 
-           msg.innerText = "🚀 자동 저장 중... ⏳"; 
-           processAction(); // 항/창고는 스캔 즉시 자동 저장
+           msg.className = "msg-success"; msg.innerText = "🚀 자동 저장 중... ⏳"; 
+           processAction(); 
         }
       }
     }
 
     function processAction() {
       const msg = document.getElementById("result-message"); 
-      const group = document.getElementById("action-group");
       const safeVin = encodeURIComponent(currentVin); 
       const safeUser = encodeURIComponent(currentUser);
 
       if (currentMode === "YARD") {
-        const loc = document.getElementById("location-input").value; 
-        if(!loc) { alert("위치를 입력하세요"); resumeScanning(); return; }
-        
-        group.classList.add("hidden"); 
-        msg.className = "msg-warn"; 
-        msg.innerText = "위치 저장 중... ⏳";
-
-        fetch(`${API_URL}?action=saveYard&vin=${safeVin}&loc=${encodeURIComponent(loc)}&worker=${safeUser}`)
-          .then(res => res.json())
-          .then(res => { 
-            if(res.status === "SUCCESS") { 
-              appData.logs[currentVin] = true; 
-              alert("위치가 정상 저장되었습니다."); 
-              resumeScanning(); 
-            } 
-          }).catch(err => { alert("통신 오류"); resumeScanning(); });
-
+        const loc = document.getElementById("location-input").value; if(!loc) { alert("위치를 입력하세요"); resetScanPanel(); return; }
+        fetch(`${API_URL}?action=saveYard&vin=${safeVin}&loc=${encodeURIComponent(loc)}&worker=${safeUser}`).then(res => res.json())
+          .then(res => { if(res.status === "SUCCESS") { appData.logs[currentVin] = true; alert("위치가 저장되었습니다."); resetScanPanel(); } }).catch(err => { alert("통신 오류"); resetScanPanel(); });
       } else if (currentMode === "GM") {
-        fetch(`${API_URL}?action=saveGwangmyeong&vin=${safeVin}&driver=${safeUser}`)
-          .then(res => res.json())
+        fetch(`${API_URL}?action=saveGwangmyeong&vin=${safeVin}&driver=${safeUser}`).then(res => res.json())
           .then(res => {
              if(res.status === "SUCCESS") { 
-                 appData.gmLogs[currentVin] = true; 
-                 appData.gmLoadedCount++; 
-                 myScannedVins.push(currentVin); 
+                 appData.gmLogs[currentVin] = true; appData.gmLoadedCount++; myScannedVins.push(currentVin); 
+                 saveState(); 
                  document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`;
-                 
                  msg.className = "msg-success";
                  msg.innerText = `✅ [상차완료] ${currentVin}`;
-                 setTimeout(() => { resumeScanning(); }, 1200); // 1.2초 후 다음 스캔 대기
+                 setTimeout(() => { resetScanPanel(); }, 1200); 
              }
-          }).catch(err => { alert("통신 오류"); resumeScanning(); });
-
+          }).catch(err => { alert("통신 오류"); resetScanPanel(); });
       } else if (currentMode === "PORT") {
-        const type = document.querySelector('input[name="portWorkType"]:checked').value;
+        const type = localStorage.getItem('kain_portWorkType') || document.querySelector('input[name="portWorkType"]:checked').value;
         const actionType = type === 'port' ? 'savePort' : 'saveWarehouse';
-        const dep = encodeURIComponent(document.getElementById("port-departure").value);
-        const dest = encodeURIComponent(document.getElementById("port-destination").value);
+        const dep = encodeURIComponent(localStorage.getItem('kain_portDep') || document.getElementById("port-departure").value);
+        const dest = encodeURIComponent(localStorage.getItem('kain_portDest') || document.getElementById("port-destination").value);
 
         fetch(`${API_URL}?action=${actionType}&vin=${safeVin}&departure=${dep}&destination=${dest}&driver=${safeUser}`)
           .then(res => res.json())
@@ -395,29 +361,16 @@
                  else { if(!appData.whLogs) appData.whLogs = {}; appData.whLogs[currentVin] = true; }
                  
                  myScannedVins.push(currentVin);
+                 saveState(); 
                  document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 누적: ${myScannedVins.length}대`;
                  
                  msg.className = "msg-success";
                  msg.innerText = `✅ [저장완료] ${currentVin} (누적: ${myScannedVins.length}대)`;
                  
-                 setTimeout(() => { resumeScanning(); }, 1200); // 1.2초 후 다음 스캔 대기
+                 setTimeout(() => { resetScanPanel(); }, 1200); 
              }
-          }).catch(err => { alert("통신 오류"); resumeScanning(); });
+          }).catch(err => { alert("통신 오류"); resetScanPanel(); });
       }
-    }
-
-    function resumeScanning() {
-      document.getElementById("control-panel").style.display = "none"; 
-      document.getElementById("location-input").value = ""; 
-      document.getElementById("result-message").innerText = ""; 
-      document.getElementById("reader").classList.remove("camera-dimmed");
-      
-      setTimeout(() => { 
-        isProcessing = false; 
-        if (html5QrCode && html5QrCode.isPaused) { 
-          html5QrCode.resume(); 
-        } 
-      }, 400);
     }
 
     function showMyList() {
@@ -435,12 +388,10 @@
       }
       document.getElementById("my-list-count").innerText = myScannedVins.length;
       document.getElementById("screen-scanner").classList.add("hidden"); document.getElementById("screen-my-list").classList.remove("hidden");
-      if (html5QrCode && html5QrCode.isScanning) html5QrCode.pause();
     }
 
     function hideMyList() {
       document.getElementById("screen-my-list").classList.add("hidden"); document.getElementById("screen-scanner").classList.remove("hidden");
-      if (html5QrCode && html5QrCode.isPaused) html5QrCode.resume();
     }
 
     function deleteVin(vin) {
@@ -454,6 +405,7 @@
         .then(res => {
            if(res.status === "SUCCESS") {
                myScannedVins = myScannedVins.filter(v => v !== vin);
+               saveState(); 
                delete appData.gmLogs[vin]; 
                appData.gmLoadedCount--;
                document.getElementById("status-bar").innerText = `기사명: ${currentUser} | 광명 할당량: ${appData.gmLoadedCount}대 완료`;
