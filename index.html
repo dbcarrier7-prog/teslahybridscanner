@@ -284,17 +284,15 @@
       document.getElementById("pin-input").value = ""; document.getElementById("driver-input").value = ""; document.getElementById("port-driver-input").value = "";
     }
 
-    // ★ 완전 수정: Binary Eye의 '진짜' 정확한 앱 주소 적용
+    // ★ 최종 수정: Binary Eye를 '웹사이트 자동 복귀 모드'로 정확하게 강제 실행
     function launchScannerApp() {
-      saveState(); // 화면이 넘어가기 전에 정보 저장
+      saveState(); // 화면이 넘어가기 전에 기사님 작업 정보 임시 저장
       const vURL = "https://teslahybridscanner.vercel.app/?scanned={CODE}";
       const callbackUrl = encodeURIComponent(vURL);
-      
-      // ★ 정확한 Binary Eye 플레이스토어 주소
       const fallbackUrl = encodeURIComponent("https://play.google.com/store/apps/details?id=de.markusfisch.android.binaryeye");
       
-      // ★ 정확한 패키지명(de.markusfisch.android.binaryeye)으로 강제 실행
-      const intentUrl = `intent://scan/#Intent;scheme=zxing;package=de.markusfisch.android.binaryeye;S.ret=${callbackUrl};S.browser_fallback_url=${fallbackUrl};end`;
+      // ★ 안드로이드 표준 액션(SCAN)과 자동 복귀(S.ret) 명령어를 포함한 완벽한 호출 코드
+      const intentUrl = `intent://scan/#Intent;action=com.google.zxing.client.android.SCAN;package=de.markusfisch.android.binaryeye;S.ret=${callbackUrl};S.browser_fallback_url=${fallbackUrl};end`;
       
       window.location.href = intentUrl;
     }
