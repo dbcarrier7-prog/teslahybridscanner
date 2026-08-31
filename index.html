@@ -48,8 +48,12 @@
     .btn-delete { width: auto; padding: 8px 15px; margin: 0; background-color: #dc3545; color: white; font-size: 14px; border-radius: 5px; }
 
     #zoom-slider { width: 92%; margin: 15px auto 0; display: block; accent-color: #fd7e14; }
+    #focus-slider { width: 92%; margin: 15px auto 0; display: block; accent-color: #28a745; }
     #torch-btn { background-color: #343a40; color: #fff; width: auto; padding: 10px 22px; margin: 12px auto 0; display: block; font-size: 15px; }
     #engine-status { font-size: 12px; color: #999; margin-top: 6px; }
+    #focus-label { font-size: 13px; color: #666; margin-top: 10px; }
+    #camera-debug { text-align: left; font-size: 11px; background: #f8f9fa; padding: 10px; border-radius: 8px; margin-top: 10px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; border: 1px solid #ddd; }
+    .btn-debug { background-color: #495057; color: white; }
   </style>
   <!-- html5-qrcode 제거, jsQR을 직접 제어하여 해상도/전처리/폴백을 전부 커스텀 제어 -->
   <script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
@@ -118,12 +122,17 @@
       </div>
     </div>
 
+    <div id="focus-label" class="hidden">🔍 초점 거리 (왼쪽=가까이, 오른쪽=멀리)</div>
+    <input type="range" id="focus-slider" class="hidden" min="0" max="1" step="0.01" value="0" oninput="onFocusInput(this.value)">
     <input type="range" id="zoom-slider" class="hidden" min="1" max="5" step="0.1" value="1" oninput="onZoomInput(this.value)">
     <button id="torch-btn" class="hidden">💡 조명 켜기</button>
     <div id="engine-status"></div>
+    <div id="camera-debug" class="hidden"></div>
 
     <button id="btn-show-list" class="btn-list hidden" onclick="showMyList()">📋 내가 상차한 차량 보기</button>
     <button class="btn-manual" onclick="manualVinEntry()">⌨️ 차대번호 직접 입력 (QR 완전 손상 시)</button>
+    <button class="btn-debug" onclick="switchCamera()">🔁 다른 카메라 렌즈로 전환</button>
+    <button class="btn-debug" onclick="toggleCameraDebug()">🔧 카메라 상세정보 보기 (문제 보고용)</button>
     <button class="btn-home" onclick="stopScannerAndHome()">🔙 모드 다시 선택하기</button>
   </div>
 
@@ -152,6 +161,7 @@
     if ("BarcodeDetector" in window) {
       try { nativeDetector = new BarcodeDetector({ formats: ["qr_code"] }); } catch (e) { nativeDetector = null; }
     }
+    let availableCams = []; let currentCamIndex = -1;
     
     const PORT_LOCATIONS = {
       port: { dep: ["PIRT", "HPIT"], dest: ["PH선광", "배후부지", "AMF(서울우유)", "PCTC(한진)"] },
@@ -241,11 +251,87 @@
 
         setupZoomControl();
         setupTorchControl();
+        setupFocusControl();
+        refreshCameraList();
 
         lastDecodeAttempt = 0;
         rafId = requestAnimationFrame(decodeLoop);
       } catch (err) {
         alert("카메라 에러: " + err);
+      }
+    }
+
+    // 사용 가능한 카메라 렌즈 목록 갱신 (권한 허용 후에만 label이 채워짐)
+    async function refreshCameraList() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        availableCams = devices.filter(d => d.kind === "videoinput");
+      } catch (e) { availableCams = []; }
+    }
+
+    // 여러 후면 렌즈(광각/초광각/망원 등)가 잡히는 기기에서, 매크로 초점이 더 잘 되는
+    // 렌즈로 수동 전환해볼 수 있게 함 (facingMode:"environment"는 기본 렌즈만 선택하는 경우가 많음)
+    async function switchCamera() {
+      if (availableCams.length === 0) await refreshCameraList();
+      if (availableCams.length <= 1) { alert("이 기기/브라우저에서는 전환 가능한 다른 카메라가 감지되지 않았습니다."); return; }
+
+      currentCamIndex = (currentCamIndex + 1) % availableCams.length;
+      const chosen = availableCams[currentCamIndex];
+
+      if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { deviceId: { exact: chosen.deviceId }, width: { ideal: 3840 }, height: { ideal: 2160 } },
+          audio: false
+        });
+        videoTrack = mediaStream.getVideoTracks()[0];
+        const video = document.getElementById("scanner-video");
+        video.srcObject = mediaStream;
+        await video.play();
+        imageCaptureRef = window.ImageCapture ? (function(){ try { return new ImageCapture(videoTrack); } catch(e){ return null; } })() : null;
+        setupZoomControl(); setupTorchControl(); setupFocusControl();
+        alert("카메라 전환됨: " + (chosen.label || ("카메라 " + (currentCamIndex + 1) + "/" + availableCams.length)));
+      } catch (e) {
+        alert("전환 실패: " + e);
+      }
+    }
+
+    // 수동 초점 거리 제어 - 기기가 focusDistance를 노출하는 경우에만 슬라이더 표시
+    // 우리 용도는 항상 근접 촬영이므로 시작 시 기본값을 "가까이" 쪽으로 맞춰둠
+    function setupFocusControl() {
+      const slider = document.getElementById("focus-slider");
+      const label = document.getElementById("focus-label");
+      try {
+        const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+        if (caps.focusDistance) {
+          slider.min = caps.focusDistance.min; slider.max = caps.focusDistance.max; slider.step = caps.focusDistance.step || 0.01;
+          const nearValue = caps.focusDistance.min;
+          slider.value = nearValue;
+          slider.classList.remove("hidden"); label.classList.remove("hidden");
+          videoTrack.applyConstraints({ advanced: [{ focusMode: "manual", focusDistance: nearValue }] }).catch(() => {});
+        } else {
+          slider.classList.add("hidden"); label.classList.add("hidden");
+        }
+      } catch (e) {
+        slider.classList.add("hidden"); label.classList.add("hidden");
+      }
+    }
+
+    function onFocusInput(value) {
+      if (videoTrack) videoTrack.applyConstraints({ advanced: [{ focusMode: "manual", focusDistance: parseFloat(value) }] }).catch(() => {});
+    }
+
+    // 이 기기의 카메라가 브라우저에 실제로 어떤 제어권을 넘겨주는지 그대로 확인 (문제 보고 시 이 내용을 캡처해서 공유해주면 정확한 진단 가능)
+    function toggleCameraDebug() {
+      const el = document.getElementById("camera-debug");
+      if (el.classList.contains("hidden")) {
+        let caps = {};
+        try { caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {}; } catch (e) {}
+        el.innerText = "기기: " + navigator.userAgent + "\n\n선택된 카메라: " + (availableCams[currentCamIndex] ? availableCams[currentCamIndex].label : "기본") +
+          "\n\n카메라 능력치(getCapabilities):\n" + JSON.stringify(caps, null, 2);
+        el.classList.remove("hidden");
+      } else {
+        el.classList.add("hidden");
       }
     }
 
@@ -393,6 +479,10 @@
       document.getElementById("pin-input").value = ""; document.getElementById("driver-input").value = ""; document.getElementById("port-driver-input").value = "";
       document.getElementById("zoom-slider").classList.add("hidden");
       document.getElementById("torch-btn").classList.add("hidden");
+      document.getElementById("focus-slider").classList.add("hidden");
+      document.getElementById("focus-label").classList.add("hidden");
+      document.getElementById("camera-debug").classList.add("hidden");
+      currentCamIndex = -1;
     }
 
     function onScanSuccess(decodedText) {
