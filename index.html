@@ -239,6 +239,7 @@
             facingMode: { ideal: "environment" },
             width: useLowRes ? { ideal: 1280 } : { min: 1280, ideal: 3840 },
             height: useLowRes ? { ideal: 720 } : { min: 720, ideal: 2160 },
+            focusMode: "continuous",
             advanced: [{ focusMode: "continuous" }]
           },
           audio: false
@@ -256,6 +257,7 @@
         setupTorchControl();
         setupFocusControl();
         refreshCameraList();
+        setupTapToRefocus();
 
         lastDecodeAttempt = 0;
         rafId = requestAnimationFrame(decodeLoop);
@@ -326,6 +328,27 @@
       videoTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] })
         .then(() => alert("자동 초점(continuous)으로 되돌렸습니다."))
         .catch(() => alert("이 기기는 초점 모드 전환 자체가 반영되지 않습니다 (원래부터 자동 모드였을 가능성이 높습니다)."));
+    }
+
+    // 화면을 탭하면 초점 모드를 순간적으로 바꿨다가 되돌려서, 카메라가 새로 초점을
+    // 다시 잡도록 강제로 유도함 (continuous AF가 첫 프레임에 고정된 채 안 풀리는 기기용 우회책)
+    function setupTapToRefocus() {
+      const video = document.getElementById("scanner-video");
+      video.onclick = async () => {
+        if (!videoTrack) return;
+        try {
+          const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+          const modes = caps.focusMode || [];
+          if (modes.includes("single-shot")) {
+            await videoTrack.applyConstraints({ advanced: [{ focusMode: "single-shot" }] }).catch(() => {});
+            setTimeout(() => { videoTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {}); }, 600);
+          } else if (modes.includes("manual") && modes.includes("continuous")) {
+            await videoTrack.applyConstraints({ advanced: [{ focusMode: "manual" }] }).catch(() => {});
+            await new Promise(r => setTimeout(r, 150));
+            await videoTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
+          }
+        } catch (e) { console.log("탭 재포커스 시도 실패:", e); }
+      };
     }
 
     let useLowRes = false; let lastTitle = ""; let lastStatusText = "";
